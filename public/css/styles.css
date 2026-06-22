@@ -462,6 +462,10 @@ body[data-theme="night"] .theme-icon-sun {
   margin-bottom: 16px;
 }
 
+.panel-header > div {
+  min-width: 0;
+}
+
 canvas {
   width: 100%;
   background: rgba(0, 0, 0, 0.08);
@@ -480,6 +484,157 @@ canvas {
   padding: 12px 14px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
+}
+
+.sensor-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.sensor-picker select {
+  min-width: 168px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+.sensor-picker-add {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.sensor-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.sensor-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sensor-chip-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+}
+
+.sensor-chip button {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.sensor-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.sensor-card {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.sensor-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  border-radius: 18px 0 0 18px;
+  background: var(--sensor-color, var(--accent));
+}
+
+.sensor-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.sensor-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sensor-card-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sensor-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.sensor-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--sensor-color, var(--accent));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--sensor-color, var(--accent)) 16%, transparent);
+}
+
+.sensor-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.sensor-metrics div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sensor-remove {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 108, 122, 0.28);
+  background: rgba(255, 108, 122, 0.1);
+  color: var(--danger);
+  cursor: pointer;
+}
+
+.sensor-empty {
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .filter-builder {

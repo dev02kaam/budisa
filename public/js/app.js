@@ -1,16 +1,21 @@
-const STORAGE_KEYS = {
+﻿const STORAGE_KEYS = {
   theme: 'budisa-theme',
   view: 'budisa-view',
   filters: 'budisa-filters',
   columns: 'budisa-history-columns',
-  visibleColumns: 'budisa-visible-columns'
+  visibleColumns: 'budisa-visible-columns',
+  selectedSensors: 'budisa-selected-sensors'
 };
+
+const SENSOR_COLORS = ['#6ea8ff', '#61d8b9', '#f6c177', '#b57bff', '#ff6c7a', '#8bd3ff'];
+const SIGNAL_KEYS = ['bascula_subida', 'bascula_bajada', 'bascula_levantada', 'estado_estable', 'alerta'];
+const SIGNAL_BAR_COLORS = ['#61d8b9', '#6ea8ff', '#f6c177', '#b57bff', '#ff6c7a'];
 
 const COLUMN_DEFS = [
   { key: 'receivedAt', label: 'Fecha' },
   { key: 'deviceId', label: 'Dispositivo' },
   { key: 'truckId', label: 'Truck' },
-  { key: 'signal', label: 'Señal' },
+  { key: 'signal', label: 'SeÃ±al' },
   { key: 'event', label: 'Evento' },
   { key: 'gpioState', label: 'GPIO' },
   { key: 'coords', label: 'GPS' },
@@ -19,7 +24,7 @@ const COLUMN_DEFS = [
 ];
 
 const FIELD_OPTIONS = [
-  { value: 'signal', label: 'Señal' },
+  { value: 'signal', label: 'SeÃ±al' },
   { value: 'deviceId', label: 'Dispositivo' },
   { value: 'truckId', label: 'Truck' },
   { value: 'event', label: 'Evento' },
@@ -46,8 +51,10 @@ const state = {
   filteredEvents: [],
   latestEvent: null,
   trail: [],
+  devices: [],
   filters: loadFilters(),
   columns: loadColumns(),
+  selectedSensors: loadSelectedSensors(),
   trackerDeviceId: 'raspberry-1',
   dragColumnKey: null,
   columnDialogSelected: new Set(),
@@ -70,6 +77,10 @@ const elements = {
   liveTime: document.getElementById('liveTime'),
   liveBattery: document.getElementById('liveBattery'),
   signalChart: document.getElementById('signalChart'),
+  sensorSelect: document.getElementById('sensorSelect'),
+  addSensorBtn: document.getElementById('addSensorBtn'),
+  sensorChips: document.getElementById('sensorChips'),
+  liveBox: document.getElementById('liveBox'),
   filterBuilder: document.getElementById('filterBuilder'),
   filterChips: document.getElementById('filterChips'),
   addFilterBtn: document.getElementById('addFilterBtn'),
@@ -132,6 +143,20 @@ function saveTheme() {
 
 function saveView() {
   localStorage.setItem(STORAGE_KEYS.view, state.view);
+}
+
+function loadSelectedSensors() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.selectedSensors);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string' && value.trim()) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSelectedSensors() {
+  localStorage.setItem(STORAGE_KEYS.selectedSensors, JSON.stringify(state.selectedSensors));
 }
 
 function getVisibleSet() {
@@ -236,15 +261,166 @@ function renderSummary() {
   elements.deviceCount.textContent = state.summary.deviceCount ?? 0;
   elements.latestSignal.textContent = state.latestEvent ? signalLabel(state.latestEvent.signal) : '-';
   elements.latestCoords.textContent = state.latestEvent ? formatGps(state.latestEvent) : '-';
-  elements.liveDevice.textContent = state.latestEvent?.deviceId || '-';
-  elements.liveSignal.textContent = state.latestEvent ? signalLabel(state.latestEvent.signal) : '-';
-  elements.liveTime.textContent = state.latestEvent ? formatDate(state.latestEvent.receivedAt) : '-';
-  elements.liveBattery.textContent = state.latestEvent?.battery ?? '-';
+  ensureSelectedSensors();
+  renderSensorSelector();
+  renderSensorChips();
+  renderSensorStack();
 }
 
-function drawSignalChart(summary) {
+function ensureSelectedSensors() {
+  const knownIds = new Set(state.devices.map((device) => device.deviceId));
+  const eventIds = new Set(state.allEvents.flatMap((event) => [event.deviceId, event.truckId]).filter(Boolean));
+  const validSelected = state.selectedSensors.filter((id) => knownIds.has(id) || eventIds.has(id));
+
+  if (validSelected.length !== state.selectedSensors.length) {
+    state.selectedSensors = validSelected;
+    saveSelectedSensors();
+  }
+
+  if (!state.selectedSensors.length) {
+    const fallback = state.latestEvent?.deviceId || state.latestEvent?.truckId || state.devices[0]?.deviceId;
+    if (fallback) {
+      state.selectedSensors = [fallback];
+      saveSelectedSensors();
+    }
+  }
+}
+
+function getSensorLabel(sensorId) {
+  const device = state.devices.find((item) => item.deviceId === sensorId);
+  return device?.name || sensorId || 'Sensor';
+}
+
+function getLatestEventForSensor(sensorId) {
+  return state.allEvents.find((event) => event.deviceId === sensorId || event.truckId === sensorId) || null;
+}
+
+function getSensorColor(index) {
+  return SENSOR_COLORS[index % SENSOR_COLORS.length];
+}
+
+function addSensor(sensorId) {
+  const nextId = String(sensorId || '').trim();
+  if (!nextId || state.selectedSensors.includes(nextId)) return;
+  state.selectedSensors = [...state.selectedSensors, nextId];
+  saveSelectedSensors();
+  renderSummary();
+  drawSignalChart();
+}
+
+function removeSensor(sensorId) {
+  state.selectedSensors = state.selectedSensors.filter((id) => id !== sensorId);
+  saveSelectedSensors();
+  renderSummary();
+  drawSignalChart();
+}
+
+function renderSensorSelector() {
+  if (!elements.sensorSelect) return;
+  const available = state.devices.filter((device) => !state.selectedSensors.includes(device.deviceId));
+  const options = available
+    .map((device) => `<option value="${escapeHtml(device.deviceId)}">${escapeHtml(device.name || device.deviceId)}</option>`)
+    .join('');
+
+  elements.sensorSelect.innerHTML = available.length
+    ? `<option value="">Añadir sensor...</option>${options}`
+    : '<option value="">No hay sensores disponibles</option>';
+  elements.sensorSelect.disabled = !available.length;
+  if (elements.addSensorBtn) {
+    elements.addSensorBtn.disabled = !available.length;
+  }
+}
+
+function renderSensorChips() {
+  if (!elements.sensorChips) return;
+  if (!state.selectedSensors.length) {
+    elements.sensorChips.innerHTML = '<span class="sensor-empty">Añade uno o varios sensores para comparar su estado.</span>';
+    return;
+  }
+
+  elements.sensorChips.innerHTML = state.selectedSensors
+    .map((sensorId, index) => {
+      const color = getSensorColor(index);
+      const label = getSensorLabel(sensorId);
+      return `
+        <span class="sensor-chip" style="--sensor-color: ${color}">
+          <span class="sensor-chip-color" style="background: ${color}"></span>
+          <span>${escapeHtml(label)}</span>
+          <button type="button" data-sensor-id="${escapeHtml(sensorId)}" aria-label="Quitar ${escapeHtml(label)}">x</button>
+        </span>
+      `;
+    })
+    .join('');
+
+  elements.sensorChips.querySelectorAll('button[data-sensor-id]').forEach((button) => {
+    button.addEventListener('click', () => removeSensor(button.dataset.sensorId));
+  });
+}
+
+function renderSensorStack() {
+  if (!elements.liveBox) return;
+  if (!state.selectedSensors.length) {
+    elements.liveBox.innerHTML = '<div class="sensor-empty">Selecciona sensores para ver su estado individual.</div>';
+    return;
+  }
+
+  elements.liveBox.innerHTML = state.selectedSensors
+    .map((sensorId, index) => {
+      const color = getSensorColor(index);
+      const latest = getLatestEventForSensor(sensorId);
+      const device = state.devices.find((item) => item.deviceId === sensorId);
+      const status = device?.status || (latest ? 'online' : 'offline');
+      const signal = latest ? signalLabel(latest.signal) : 'Sin datos';
+      const signalValue = latest?.signal || '-';
+      const receivedAt = latest ? formatDate(latest.receivedAt) : '-';
+      const battery = latest?.battery ?? '-';
+      const coords = latest ? formatGps(latest) : '-';
+
+      return `
+        <article class="sensor-card" style="--sensor-color: ${color}">
+          <div class="sensor-card-head">
+            <div class="sensor-card-title">
+              <span class="sensor-status-dot" aria-hidden="true"></span>
+              <strong>${escapeHtml(device?.name || sensorId)}</strong>
+            </div>
+            <button class="sensor-remove" type="button" data-sensor-id="${escapeHtml(sensorId)}" aria-label="Quitar sensor">x</button>
+          </div>
+          <div class="sensor-status">
+            <span>${escapeHtml(status === 'online' ? 'Conectado' : status === 'idle' ? 'Inactivo' : 'Sin datos')}</span>
+            <span>·</span>
+            <span>${escapeHtml(latest ? signal : 'Esperando lectura')}</span>
+          </div>
+          <div class="sensor-metrics">
+            <div><span>Señal</span><strong>${escapeHtml(signalValue)}</strong></div>
+            <div><span>Hora</span><strong>${escapeHtml(receivedAt)}</strong></div>
+            <div><span>Batería</span><strong>${escapeHtml(String(battery))}</strong></div>
+            <div><span>GPS</span><strong>${escapeHtml(coords)}</strong></div>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+
+  elements.liveBox.querySelectorAll('button[data-sensor-id]').forEach((button) => {
+    button.addEventListener('click', () => removeSensor(button.dataset.sensorId));
+  });
+}
+
+function buildSensorSignalCounts(sensorId) {
+  const counts = Object.fromEntries(SIGNAL_KEYS.map((key) => [key, 0]));
+  state.allEvents
+    .filter((event) => event.deviceId === sensorId || event.truckId === sensorId)
+    .forEach((event) => {
+      if (counts[event.signal] !== undefined) {
+        counts[event.signal] += 1;
+      }
+    });
+  return counts;
+}
+
+function drawSignalChart() {
   const canvas = elements.signalChart;
-  if (!canvas || !summary) return;
+  if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const ratio = window.devicePixelRatio || 1;
   const width = canvas.clientWidth || canvas.width;
@@ -255,31 +431,165 @@ function drawSignalChart(summary) {
   ctx.scale(ratio, ratio);
   ctx.clearRect(0, 0, width, height);
 
-  const values = [
-    summary.signalCounts.bascula_subida || 0,
-    summary.signalCounts.bascula_bajada || 0,
-    summary.signalCounts.bascula_levantada || 0
-  ];
-  const labels = ['Subida', 'Bajada', 'Levantada'];
-  const max = Math.max(1, ...values);
-  const barWidth = (width - 120) / values.length;
+  const sensors = state.selectedSensors.length ? state.selectedSensors : [state.latestEvent?.deviceId || state.latestEvent?.truckId].filter(Boolean);
+  const hasData = sensors.length && sensors.some((sensorId) => {
+    const counts = buildSensorSignalCounts(sensorId);
+    return SIGNAL_KEYS.some((key) => (counts[key] || 0) > 0);
+  });
 
   ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text');
   ctx.font = '14px var(--font)';
-  ctx.fillText('Actividad por tipo de señal', 16, 28);
+  ctx.fillText('Actividad por sensor y tipo de señal', 16, 28);
 
-  values.forEach((value, index) => {
-    const x = 50 + index * barWidth;
-    const h = ((height - 80) * value) / max;
-    const y = height - 40 - h;
-    const palette = ['#61d8b9', '#6ea8ff', '#f6c177'];
-    ctx.fillStyle = palette[index];
-    ctx.fillRect(x, y, barWidth * 0.48, h);
-    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted');
-    ctx.fillText(labels[index], x - 4, height - 16);
-    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text');
-    ctx.fillText(String(value), x + 4, y - 8);
+  if (!sensors.length || !hasData) {
+    drawEmptyChartPlaceholder(ctx, width, height, !sensors.length);
+    return;
+  }
+
+  const countsBySensor = sensors.map((sensorId) => buildSensorSignalCounts(sensorId));
+  const max = Math.max(1, ...countsBySensor.flatMap((counts) => SIGNAL_KEYS.map((key) => counts[key] || 0)));
+  const chartLeft = 68;
+  const chartRight = 20;
+  const chartTop = 52;
+  const chartBottom = 52;
+  const chartWidth = width - chartLeft - chartRight;
+  const chartHeight = height - chartTop - chartBottom;
+  const groupWidth = chartWidth / SIGNAL_KEYS.length;
+  const barWidth = Math.min(22, groupWidth / Math.max(1, sensors.length + 1));
+  const yTicks = 4;
+  const yStep = max / yTicks;
+
+  ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--line');
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted');
+  ctx.font = '12px var(--font)';
+  ctx.textAlign = 'right';
+
+  for (let tick = 0; tick <= yTicks; tick += 1) {
+    const value = Math.round(yStep * tick);
+    const y = chartTop + chartHeight - (chartHeight / yTicks) * tick;
+    ctx.beginPath();
+    ctx.moveTo(chartLeft, y);
+    ctx.lineTo(chartLeft + chartWidth, y);
+    ctx.stroke();
+    ctx.fillText(String(value), chartLeft - 10, y + 4);
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted');
+
+  SIGNAL_KEYS.forEach((signalKey, signalIndex) => {
+    const label = signalLabel(signalKey).replace(/^Bascula\s*/i, '');
+    const groupX = chartLeft + signalIndex * groupWidth;
+    ctx.fillText(label, groupX + groupWidth / 2, height - 18);
+
+    countsBySensor.forEach((counts, sensorIndex) => {
+      const value = counts[signalKey] || 0;
+      const barHeight = (chartHeight * value) / max;
+      const x = groupX + groupWidth * 0.15 + sensorIndex * (barWidth + 6);
+      const y = chartTop + chartHeight - barHeight;
+      const color = getSensorColor(sensorIndex);
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, barWidth, barHeight);
+      if (value > 0) {
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text');
+        ctx.fillText(String(value), x + 2, y - 6);
+      }
+    });
   });
+
+  sensors.forEach((sensorId, index) => {
+    const color = getSensorColor(index);
+    const label = getSensorLabel(sensorId);
+    const legendX = chartLeft + chartWidth - 8;
+    const legendY = 56 + index * 20;
+    ctx.fillStyle = color;
+    ctx.fillRect(legendX - 120, legendY - 10, 10, 10);
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text');
+    ctx.fillText(label, legendX - 104, legendY - 1);
+  });
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted');
+  ctx.font = '11px var(--font)';
+  ctx.fillText('Tipos de señal', chartLeft, height - 4);
+}
+
+function drawEmptyChartPlaceholder(ctx, width, height, needsSelection = false) {
+  const textColor = getComputedStyle(document.body).getPropertyValue('--text');
+  const mutedColor = getComputedStyle(document.body).getPropertyValue('--muted');
+  const lineColor = getComputedStyle(document.body).getPropertyValue('--line');
+  const chartLeft = 68;
+  const chartRight = 20;
+  const chartTop = 52;
+  const chartBottom = 52;
+  const innerWidth = width - chartLeft - chartRight;
+  const innerHeight = height - chartTop - chartBottom;
+  const bars = 12;
+
+  ctx.save();
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 1;
+  ctx.textAlign = 'right';
+  ctx.font = '12px var(--font)';
+
+  for (let i = 0; i <= 4; i += 1) {
+    const y = chartTop + (innerHeight / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(chartLeft, y);
+    ctx.lineTo(chartLeft + innerWidth, y);
+    ctx.stroke();
+    ctx.fillStyle = mutedColor;
+    ctx.fillText(String(Math.round((4 - i) * 1)), chartLeft - 10, y + 4);
+  }
+
+  for (let i = 0; i < bars; i += 1) {
+    const x = chartLeft + (innerWidth / bars) * i;
+    ctx.beginPath();
+    ctx.moveTo(x, chartTop);
+    ctx.lineTo(x, chartTop + innerHeight);
+    ctx.stroke();
+  }
+
+  const xLabels = SIGNAL_KEYS.map((key) => signalLabel(key).replace(/^Bascula\s*/i, ''));
+  ctx.textAlign = 'center';
+  ctx.fillStyle = mutedColor;
+  xLabels.forEach((label, index) => {
+    const x = chartLeft + ((innerWidth / xLabels.length) * index) + innerWidth / xLabels.length / 2;
+    ctx.fillText(label, x, height - 24);
+  });
+
+  const placeholderBars = [
+    { x: chartLeft + innerWidth * 0.18, h: innerHeight * 0.28, color: '#61d8b9' },
+    { x: chartLeft + innerWidth * 0.34, h: innerHeight * 0.5, color: '#6ea8ff' },
+    { x: chartLeft + innerWidth * 0.5, h: innerHeight * 0.22, color: '#f6c177' },
+    { x: chartLeft + innerWidth * 0.66, h: innerHeight * 0.42, color: '#b57bff' }
+  ];
+
+  placeholderBars.forEach((bar) => {
+    ctx.fillStyle = bar.color;
+    ctx.globalAlpha = 0.18;
+    ctx.fillRect(bar.x, chartTop + innerHeight - bar.h, 18, bar.h);
+  });
+
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = textColor;
+  ctx.font = '600 15px var(--font)';
+  ctx.textAlign = 'center';
+  ctx.fillText(needsSelection ? 'Selecciona uno o varios sensores para comparar su actividad' : 'Sin datos suficientes para generar la comparativa', width / 2, height / 2 - 4);
+  ctx.fillStyle = mutedColor;
+  ctx.font = '13px var(--font)';
+  ctx.fillText('La gráfica se activará cuando haya eventos de los sensores elegidos.', width / 2, height / 2 + 18);
+  ctx.fillStyle = mutedColor;
+  ctx.font = '11px var(--font)';
+  ctx.textAlign = 'left';
+  ctx.fillText('Tipos de señal', chartLeft, height - 4);
+  ctx.save();
+  ctx.translate(18, chartTop + innerHeight / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('Volumen de eventos', 0, 0);
+  ctx.restore();
+  ctx.restore();
+  ctx.textAlign = 'start';
 }
 
 function filterEvents(events, filters) {
@@ -489,7 +799,7 @@ function buildFilterValueControl(filter, inputType) {
     const options = Object.keys(SIGNAL_LABELS)
       .map((signalKey) => `<option value="${signalKey}" ${signalKey === filter.value ? 'selected' : ''}>${SIGNAL_LABELS[signalKey]}</option>`)
       .join('');
-    return `<select data-role="value">${['<option value="">Selecciona señal</option>', options].join('')}</select>`;
+    return `<select data-role="value">${['<option value="">Selecciona seÃ±al</option>', options].join('')}</select>`;
   }
 
   if (filter.field === 'hasGps') {
@@ -648,7 +958,7 @@ function renderTableColumns() {
       ? `
         <div class="history-column-menu-head">
           <strong>Columnas ocultas</strong>
-          <button type="button" class="history-column-menu-close" aria-label="Cerrar">×</button>
+          <button type="button" class="history-column-menu-close" aria-label="Cerrar">Ã—</button>
         </div>
         <div class="history-column-menu-list">
           ${hiddenColumns
@@ -860,19 +1170,21 @@ function exportCsv() {
 
 async function refresh() {
   try {
-    const [summary, events] = await Promise.all([
+    const [summary, events, devices] = await Promise.all([
       requestJson('/api/summary'),
       requestJson('/api/events/search?limit=1000'),
+      requestJson('/api/devices').catch(() => [])
     ]);
 
     state.summary = summary;
     state.allEvents = events || [];
+    state.devices = devices || [];
     state.latestEvent = summary.latestEvent || state.allEvents[0] || null;
     state.trackerDeviceId = state.latestEvent?.truckId || state.latestEvent?.deviceId || state.trackerDeviceId;
 
     elements.apiStatus.textContent = 'Conectado';
     renderSummary();
-    drawSignalChart(summary);
+    drawSignalChart();
     applyCurrentFilters();
 
     const trail = await requestJson(`/api/trail/${encodeURIComponent(state.trackerDeviceId)}?limit=30`);
@@ -906,6 +1218,19 @@ function setupListeners() {
   });
   elements.exportCsvBtn.addEventListener('click', exportCsv);
 
+  elements.sensorSelect?.addEventListener('change', () => {
+    if (elements.sensorSelect.value) {
+      addSensor(elements.sensorSelect.value);
+      elements.sensorSelect.value = '';
+    }
+  });
+  elements.addSensorBtn?.addEventListener('click', () => {
+    if (elements.sensorSelect?.value) {
+      addSensor(elements.sensorSelect.value);
+      elements.sensorSelect.value = '';
+    }
+  });
+
   elements.columnDialogClose?.addEventListener('click', closeColumnDialog);
   elements.columnDialogCancel?.addEventListener('click', closeColumnDialog);
   elements.columnDialog?.addEventListener('cancel', (event) => {
@@ -935,7 +1260,7 @@ function setupListeners() {
 
   window.addEventListener('resize', () => {
     if (state.summary) {
-      drawSignalChart(state.summary);
+      drawSignalChart();
     }
     if (state.trail.length) {
       drawTrailMap(state.trail);
@@ -971,3 +1296,6 @@ function escapeHtml(value) {
 }
 
 boot();
+
+
+

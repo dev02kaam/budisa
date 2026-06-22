@@ -119,15 +119,17 @@
 
           <article class="panel">
             <div class="panel-header">
-              <h3>Estado del sensor</h3>
-              <p>Lectura mas reciente</p>
+              <div>
+                <h3>Estado del sensor</h3>
+                <p>Selecciona uno o varios sensores para comparar su estado</p>
+              </div>
+              <div class="sensor-picker">
+                <select id="sensorSelect" aria-label="Seleccionar sensor"></select>
+                <button class="mini-action sensor-picker-add" id="addSensorBtn" type="button" title="Añadir sensor">+</button>
+              </div>
             </div>
-            <div class="live-box" id="liveBox">
-              <div><span>Dispositivo</span><strong id="liveDevice">-</strong></div>
-              <div><span>Señal</span><strong id="liveSignal">-</strong></div>
-              <div><span>Hora</span><strong id="liveTime">-</strong></div>
-              <div><span>Bateria</span><strong id="liveBattery">-</strong></div>
-            </div>
+            <div class="sensor-chip-row" id="sensorChips"></div>
+            <div class="sensor-stack" id="liveBox"></div>
           </article>
         </section>
       </section>
