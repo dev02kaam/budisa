@@ -20,6 +20,7 @@ body[data-theme="night"] {
   --accent-strong: rgba(110, 168, 255, 0.18);
   --danger: #ff6c7a;
   --surface: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  color-scheme: dark;
 }
 
 body[data-theme="day"] {
@@ -157,6 +158,9 @@ select {
 .main {
   padding: 24px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 .topbar {
@@ -238,8 +242,12 @@ body[data-theme="day"] .theme-icon-sun {
 }
 
 body[data-theme="night"] .theme-icon-moon {
-  color: var(--accent-2);
+  color: #b57bff;
   transform: scale(1.08);
+}
+
+body[data-theme="night"] .theme-icon-sun {
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .ghost-btn,
@@ -275,6 +283,7 @@ body[data-theme="night"] .theme-icon-moon {
 
 .view.view-active {
   display: block;
+  flex: 1 0 auto;
 }
 
 .cards {
@@ -376,8 +385,42 @@ canvas {
   padding: 11px 12px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--panel-strong);
   color: var(--text);
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.01);
+}
+
+body[data-theme="night"] .filter-row select,
+body[data-theme="night"] .filter-row input {
+  color-scheme: dark;
+  background-color: rgba(10, 15, 28, 0.94);
+}
+
+body[data-theme="day"] .filter-row select,
+body[data-theme="day"] .filter-row input {
+  color-scheme: light;
+}
+
+.filter-row select:focus,
+.filter-row input:focus {
+  border-color: rgba(97, 216, 185, 0.45);
+  box-shadow: 0 0 0 3px rgba(97, 216, 185, 0.12);
+}
+
+.filter-row select option {
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+body[data-theme="night"] .filter-row select option {
+  background: #10192d;
+  color: #eef4ff;
+}
+
+body[data-theme="day"] .filter-row select option {
+  background: #ffffff;
+  color: #122033;
 }
 
 .remove-filter {
@@ -789,6 +832,36 @@ canvas {
 .mini-item strong {
   display: block;
   margin-bottom: 4px;
+}
+
+.app-footer {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.92rem;
+  letter-spacing: 0.01em;
+}
+
+.app-footer a {
+  color: var(--accent-2);
+  text-decoration: none;
+  transition: color 0.16s ease, opacity 0.16s ease;
+}
+
+.app-footer a:hover {
+  color: var(--accent);
+  opacity: 0.92;
+}
+
+.app-footer-separator {
+  opacity: 0.6;
 }
 
 @media (max-width: 1180px) {
