@@ -59,8 +59,8 @@ const elements = {
   apiStatus: document.getElementById('apiStatus'),
   themeToggleInput: document.getElementById('themeToggleInput'),
   navMenu: document.getElementById('navMenu'),
+  pageIcon: document.getElementById('pageIcon'),
   pageTitle: document.getElementById('pageTitle'),
-  pageSubtitle: document.getElementById('pageSubtitle'),
   totalEvents: document.getElementById('totalEvents'),
   deviceCount: document.getElementById('deviceCount'),
   latestSignal: document.getElementById('latestSignal'),
@@ -187,6 +187,26 @@ function applyTheme() {
   saveTheme();
 }
 
+const VIEW_ICONS = {
+  dashboard: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h8.1v6.2H18l2.3 2.4V17H19a2.8 2.8 0 1 0-5.6 0H10a2.8 2.8 0 1 0-5.6 0H3V9.5A2 2 0 0 1 5 7.5Zm.5 1.5v4.5h2.8V9H4.5Zm3.8 0v4.5H13V9H8.3Zm5.7 0v3.1h2.8l-1.5-1.6A1 1 0 0 0 14 11.7Zm-5.9 6.8a1.1 1.1 0 1 1-2.2 0 1.1 1.1 0 0 1 2.2 0Zm9 0a1.1 1.1 0 1 1-2.2 0 1.1 1.1 0 0 1 2.2 0Z"/>
+    </svg>
+  `,
+  historico: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 5.5A2.5 2.5 0 0 1 9.5 3h5A2.5 2.5 0 0 1 17 5.5v13A2.5 2.5 0 0 1 14.5 21h-5A2.5 2.5 0 0 1 7 18.5v-13Zm2.5-.5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5h-5Z"/>
+      <path d="M10 9h4v2h-4zm0 4h4v2h-4z"/>
+      <path d="M5 8H3v8h2zm16 0h-2v8h2z" opacity=".85"/>
+    </svg>
+  `,
+  tracker: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2a7 7 0 0 0-7 7c0 4.7 7 13 7 13s7-8.3 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/>
+    </svg>
+  `
+};
+
 function setView(view) {
   state.view = view;
   elements.views.forEach((section) => {
@@ -197,14 +217,16 @@ function setView(view) {
   });
 
   const titles = {
-    dashboard: ['Panel de control', 'Recepcion de eventos desde Raspberry con MongoDB'],
-    historico: ['Historico inteligente', 'Filtros apilables, columnas moviles y exportacion'],
-    tracker: ['Tracker GPS', 'Ruta de posiciones con mini historial']
+    dashboard: 'Panel de control',
+    historico: 'Historico inteligente',
+    tracker: 'Tracker GPS'
   };
 
-  const [title, subtitle] = titles[view] || titles.dashboard;
-  elements.pageTitle.textContent = title;
-  elements.pageSubtitle.textContent = subtitle;
+  elements.pageTitle.textContent = titles[view] || titles.dashboard;
+  if (elements.pageIcon) {
+    elements.pageIcon.className = `page-icon page-icon-${view}`;
+    elements.pageIcon.innerHTML = VIEW_ICONS[view] || VIEW_ICONS.dashboard;
+  }
   saveView();
 }
 

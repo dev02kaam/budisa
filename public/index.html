@@ -4,23 +4,55 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Budisa | Sensor de Iman</title>
+  <link rel="icon" href="/assets/logoyfavicon.png" type="image/png" />
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body data-theme="night">
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark">B</div>
+        <div class="brand-mark brand-logo-wrap">
+          <img src="/assets/logoyfavicon.png" alt="Budisa" class="brand-logo" />
+        </div>
         <div>
-          <h1>Budisa</h1>
-          <p>Sensor, GPS y trazabilidad</p>
+          <h1 class="brand-title">
+            <span class="brand-letter brand-letter-outer">B</span>
+            <span class="brand-letter brand-letter-outer">U</span>
+            <span class="brand-letter brand-letter-mid">D</span>
+            <span class="brand-letter brand-letter-mid">I</span>
+            <span class="brand-letter brand-letter-outer">S</span>
+            <span class="brand-letter brand-letter-outer">A</span>
+          </h1>
         </div>
       </div>
 
       <nav class="nav" id="navMenu">
-        <button class="nav-item active" data-view="dashboard">Dashboard</button>
-        <button class="nav-item" data-view="historico">Historico</button>
-        <button class="nav-item" data-view="tracker">Tracker GPS</button>
+        <button class="nav-item active" data-view="dashboard">
+          <span class="nav-icon nav-icon-truck" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h8.1v6.2H18l2.3 2.4V17H19a2.8 2.8 0 1 0-5.6 0H10a2.8 2.8 0 1 0-5.6 0H3V9.5A2 2 0 0 1 5 7.5Zm.5 1.5v4.5h2.8V9H4.5Zm3.8 0v4.5H13V9H8.3Zm5.7 0v3.1h2.8l-1.5-1.6A1 1 0 0 0 14 11.7Zm-5.9 6.8a1.1 1.1 0 1 1-2.2 0 1.1 1.1 0 0 1 2.2 0Zm9 0a1.1 1.1 0 1 1-2.2 0 1.1 1.1 0 0 1 2.2 0Z"/>
+            </svg>
+          </span>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-item" data-view="historico">
+          <span class="nav-icon nav-icon-sensor" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M7 5.5A2.5 2.5 0 0 1 9.5 3h5A2.5 2.5 0 0 1 17 5.5v13A2.5 2.5 0 0 1 14.5 21h-5A2.5 2.5 0 0 1 7 18.5v-13Zm2.5-.5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5h-5Z"/>
+              <path d="M10 9h4v2h-4zm0 4h4v2h-4z"/>
+              <path d="M5 8H3v8h2zm16 0h-2v8h2z" opacity=".85"/>
+            </svg>
+          </span>
+          <span>Historico</span>
+        </button>
+        <button class="nav-item" data-view="tracker">
+          <span class="nav-icon nav-icon-gps" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="M12 2a7 7 0 0 0-7 7c0 4.7 7 13 7 13s7-8.3 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/>
+            </svg>
+          </span>
+          <span>Tracker GPS</span>
+        </button>
       </nav>
 
       <section class="sidebar-card">
@@ -38,8 +70,8 @@
     <main class="main">
       <header class="topbar">
         <div class="topbar-copy">
+          <span class="page-icon" id="pageIcon" aria-hidden="true"></span>
           <h2 id="pageTitle">Panel de control</h2>
-          <p id="pageSubtitle">Recepcion de eventos desde Raspberry con MongoDB</p>
         </div>
         <div class="topbar-actions">
           <label class="theme-switch" for="themeToggleInput">
