@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Budisa | Sensor de Iman</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body data-theme="night">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">B</div>
+        <div>
+          <h1>Budisa</h1>
+          <p>Sensor, GPS y trazabilidad</p>
+        </div>
+      </div>
+
+      <nav class="nav" id="navMenu">
+        <button class="nav-item active" data-view="dashboard">Dashboard</button>
+        <button class="nav-item" data-view="historico">Historico</button>
+        <button class="nav-item" data-view="tracker">Tracker GPS</button>
+      </nav>
+
+      <section class="sidebar-card">
+        <h3>Funciones extra</h3>
+        <ul>
+          <li>Estado online/offline por dispositivo</li>
+          <li>Filtros apilables con reglas combinables</li>
+          <li>Columnas reordenables por drag and drop</li>
+          <li>Mini historial de posiciones GPS</li>
+          <li>Exportacion y vista adaptable de tema</li>
+        </ul>
+      </section>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-copy">
+          <h2 id="pageTitle">Panel de control</h2>
+          <p id="pageSubtitle">Recepcion de eventos desde Raspberry con MongoDB</p>
+        </div>
+        <div class="topbar-actions">
+          <label class="theme-switch" for="themeToggleInput">
+            <input type="checkbox" id="themeToggleInput" />
+            <span class="theme-switch-ui">
+              <span class="theme-icon theme-icon-sun">☀</span>
+              <span class="theme-track">
+                <span class="theme-thumb"></span>
+              </span>
+              <span class="theme-icon theme-icon-moon">☾</span>
+            </span>
+          </label>
+          <div class="status-pill" id="apiStatus">Conectando...</div>
+        </div>
+      </header>
+
+      <section class="view view-active" id="view-dashboard" data-view="dashboard">
+        <section class="cards" id="summaryCards">
+          <article class="card">
+            <span>Eventos totales</span>
+            <strong id="totalEvents">0</strong>
+          </article>
+          <article class="card">
+            <span>Dispositivos</span>
+            <strong id="deviceCount">0</strong>
+          </article>
+          <article class="card">
+            <span>Ultima señal</span>
+            <strong id="latestSignal">-</strong>
+          </article>
+          <article class="card">
+            <span>Ultima ubicacion</span>
+            <strong id="latestCoords">-</strong>
+          </article>
+        </section>
+
+        <section class="grid grid-dashboard">
+          <article class="panel panel-wide">
+            <div class="panel-header">
+              <h3>Resumen de señales</h3>
+              <p>Grafico rapido de la actividad</p>
+            </div>
+            <canvas id="signalChart" width="900" height="240"></canvas>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Estado del sensor</h3>
+              <p>Lectura mas reciente</p>
+            </div>
+            <div class="live-box" id="liveBox">
+              <div><span>Dispositivo</span><strong id="liveDevice">-</strong></div>
+              <div><span>Señal</span><strong id="liveSignal">-</strong></div>
+              <div><span>Hora</span><strong id="liveTime">-</strong></div>
+              <div><span>Bateria</span><strong id="liveBattery">-</strong></div>
+            </div>
+          </article>
+        </section>
+      </section>
+
+      <section class="view" id="view-historico" data-view="historico">
+        <section class="grid grid-history-controls">
+          <article class="panel panel-wide">
+            <div class="panel-header">
+              <h3>Filtros apilables</h3>
+              <p>Combina, quita y reordena criterios</p>
+            </div>
+
+            <div id="filterBuilder" class="filter-builder"></div>
+
+            <div class="filter-actions">
+              <button class="primary-btn" id="addFilterBtn" type="button">+ Añadir filtro</button>
+              <button class="ghost-btn" id="clearFiltersBtn" type="button">Limpiar filtros</button>
+              <button class="ghost-btn" id="resetColumnsBtn" type="button">Reset columnas</button>
+              <button class="ghost-btn" id="exportCsvBtn" type="button">Exportar CSV</button>
+            </div>
+
+            <div class="filter-chip-wrap" id="filterChips"></div>
+          </article>
+        </section>
+
+        <section class="panel panel-table">
+          <div class="panel-header">
+            <h3>Historico completo</h3>
+            <p id="historyCount">0 eventos visibles</p>
+          </div>
+          <div class="table-wrap">
+            <table class="history-table">
+              <thead id="historyHead"></thead>
+              <tbody id="eventsTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" id="view-tracker" data-view="tracker">
+        <section class="grid grid-tracker">
+          <article class="panel panel-wide">
+            <div class="panel-header">
+              <h3>Tracker GPS</h3>
+              <p>Ruta de puntos recientes</p>
+            </div>
+            <div class="tracker-box">
+              <svg id="gpsMap" viewBox="0 0 400 320" role="img" aria-label="Mapa GPS simple"></svg>
+            </div>
+            <div class="tracker-meta">
+              <span id="trailCount">0 puntos</span>
+              <span id="boundsInfo">Sin datos</span>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Mini historial</h3>
+              <p>Ultimas posiciones</p>
+            </div>
+            <div class="mini-trail" id="trailList"></div>
+          </article>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <dialog class="column-dialog" id="columnDialog">
+    <form method="dialog" class="column-dialog-card" id="columnDialogForm">
+      <div class="column-dialog-header">
+        <div>
+          <h3>Columnas ocultas</h3>
+          <p>Selecciona una o varias columnas para volver a mostrarlas.</p>
+        </div>
+        <button class="column-dialog-close" type="button" id="columnDialogClose" aria-label="Cerrar">×</button>
+      </div>
+      <div class="column-dialog-list" id="columnDialogList"></div>
+      <div class="column-dialog-actions">
+        <button class="ghost-btn" type="button" id="columnDialogCancel">Cancelar</button>
+        <button class="primary-btn" type="button" id="columnDialogAdd" disabled>Añadir</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
