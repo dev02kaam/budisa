@@ -1,36 +1,36 @@
 # Budisa
 
-Plataforma modular en Node.js, HTML, CSS y JavaScript puro para recibir telemetria desde una Raspberry con:
+Plataforma modular en Node.js, HTML, CSS y JavaScript puro para recibir telemetría desde una Raspberry con:
 
-- Señales del sensor de iman: `bascula_subida`, `bascula_bajada`, `estado_estable`, `alerta`
+- Señales del sensor de imán: `bascula_subida`, `bascula_bajada`, `estado_estable`, `alerta`
 - GPS asociado a cada evento
 - MongoDB como persistencia
 - Dashboard visual
-- Historico de eventos con filtros apilables
+- Histórico de eventos con filtros apilables
 - Columnas reordenables por drag and drop
 - Columnas visibles/ocultas con botones `x` y `+`
 - Tracker GPS con mini historial de posiciones
-- Selector de modo dia/noche
+- Selector de modo día/noche
 
 ## Estructura
 
 - `server.js` arranque de la app
-- `src/config` configuracion y conexion a MongoDB
+- `src/config` configuración y conexión a MongoDB
 - `src/models` esquemas de Mongo
-- `src/services` logica de negocio
-- `src/controllers` handlers HTTP
+- `src/services` lógica de negocio
+- `src/controllers` controladores HTTP
 - `src/routes` rutas API y vistas
-- `public` frontend estatico
+- `public` frontend estático
 
 ## Endpoints
 
 - `POST /api/telemetry` recibe eventos desde la Raspberry
 - `GET /api/summary` resumen general
-- `GET /api/events?limit=20` historico reciente
-- `GET /api/events/search?limit=200` busqueda y filtros del historico
+- `GET /api/events?limit=20` histórico reciente
+- `GET /api/events/search?limit=200` búsqueda y filtros del histórico
 - `GET /api/trail/:deviceId?limit=100` recorrido GPS
 - `GET /api/devices` listado de dispositivos
-- `GET /api/insights` señales de alerta y cambios rapidos
+- `GET /api/insights` señales de alerta y cambios rápidos
 
 ## Ejemplo de payload
 
@@ -65,7 +65,7 @@ La app Python de `sensorseñal` manda eventos con esta forma:
 - `thresholdSeconds`
 - `lat`, `lon`, `speed`, `gpsTimestamp` opcionales
 
-La API de Budisa acepta ese formato directamente y tambien sigue aceptando una version simplificada con `deviceId` y `signal`.
+La API de Budisa acepta ese formato directamente y también sigue aceptando una versión simplificada con `deviceId` y `signal`.
 
 ## Arranque
 
@@ -76,8 +76,8 @@ La API de Budisa acepta ese formato directamente y tambien sigue aceptando una v
 
 ## Ideas extra que ya deja preparada la base
 
-- Exportacion CSV
-- Alertas por señales rapidas
+- Exportación CSV
+- Alertas por señales rápidas
 - Estados por dispositivo
-- Ultima posicion y ultima señal
-- Historial ampliable a filtros por fechas
+- Última posición y última señal
+- Histórico ampliable a filtros por fechas

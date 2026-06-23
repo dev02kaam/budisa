@@ -15,30 +15,30 @@ const COLUMN_DEFS = [
   { key: 'receivedAt', label: 'Fecha' },
   { key: 'deviceId', label: 'Dispositivo' },
   { key: 'truckId', label: 'Truck' },
-  { key: 'signal', label: 'SeÃ±al' },
+  { key: 'signal', label: 'Señal' },
   { key: 'event', label: 'Evento' },
   { key: 'gpioState', label: 'GPIO' },
   { key: 'coords', label: 'GPS' },
-  { key: 'battery', label: 'Bateria' },
+  { key: 'battery', label: 'Batería' },
   { key: 'reason', label: 'Motivo' }
 ];
 
 const FIELD_OPTIONS = [
-  { value: 'signal', label: 'SeÃ±al' },
+  { value: 'signal', label: 'Señal' },
   { value: 'deviceId', label: 'Dispositivo' },
   { value: 'truckId', label: 'Truck' },
   { value: 'event', label: 'Evento' },
   { value: 'reason', label: 'Motivo' },
   { value: 'gpioState', label: 'GPIO' },
-  { value: 'battery', label: 'Bateria' },
+  { value: 'battery', label: 'Batería' },
   { value: 'receivedAt', label: 'Fecha' },
   { value: 'hasGps', label: 'Tiene GPS' }
 ];
 
 const SIGNAL_LABELS = {
-  bascula_subida: 'Bascula subida',
-  bascula_bajada: 'Bascula bajada',
-  bascula_levantada: 'Bascula levantada',
+  bascula_subida: 'Báscula subida',
+  bascula_bajada: 'Báscula bajada',
+  bascula_levantada: 'Báscula levantada',
   estado_estable: 'Estado estable',
   alerta: 'Alerta'
 };
@@ -243,7 +243,7 @@ function setView(view) {
 
   const titles = {
     dashboard: 'Panel de control',
-    historico: 'Historico inteligente',
+    historico: 'Histórico inteligente',
     tracker: 'Tracker GPS'
   };
 
@@ -478,7 +478,7 @@ function drawSignalChart() {
   ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--muted');
 
   SIGNAL_KEYS.forEach((signalKey, signalIndex) => {
-    const label = signalLabel(signalKey).replace(/^Bascula\s*/i, '');
+    const label = signalLabel(signalKey).replace(/^Báscula\s*/i, '');
     const groupX = chartLeft + signalIndex * groupWidth;
     ctx.fillText(label, groupX + groupWidth / 2, height - 18);
 
@@ -550,7 +550,7 @@ function drawEmptyChartPlaceholder(ctx, width, height, needsSelection = false) {
     ctx.stroke();
   }
 
-  const xLabels = SIGNAL_KEYS.map((key) => signalLabel(key).replace(/^Bascula\s*/i, ''));
+  const xLabels = SIGNAL_KEYS.map((key) => signalLabel(key).replace(/^Báscula\s*/i, ''));
   ctx.textAlign = 'center';
   ctx.fillStyle = mutedColor;
   xLabels.forEach((label, index) => {
@@ -703,9 +703,9 @@ function operatorLabel(op) {
     gte: 'Mayor o igual',
     lt: 'Menor que',
     lte: 'Menor o igual',
-    after: 'Despues de',
+    after: 'Después de',
     before: 'Antes de',
-    yes: 'Si',
+    yes: 'Sí',
     no: 'No'
   }[op] || op;
 }
@@ -799,13 +799,13 @@ function buildFilterValueControl(filter, inputType) {
     const options = Object.keys(SIGNAL_LABELS)
       .map((signalKey) => `<option value="${signalKey}" ${signalKey === filter.value ? 'selected' : ''}>${SIGNAL_LABELS[signalKey]}</option>`)
       .join('');
-    return `<select data-role="value">${['<option value="">Selecciona seÃ±al</option>', options].join('')}</select>`;
+    return `<select data-role="value">${['<option value="">Selecciona señal</option>', options].join('')}</select>`;
   }
 
   if (filter.field === 'hasGps') {
     return `
       <select data-role="value">
-        <option value="yes" ${String(filter.value || 'yes') === 'yes' ? 'selected' : ''}>Si</option>
+        <option value="yes" ${String(filter.value || 'yes') === 'yes' ? 'selected' : ''}>Sí</option>
         <option value="no" ${String(filter.value) === 'no' ? 'selected' : ''}>No</option>
       </select>
     `;
@@ -958,7 +958,7 @@ function renderTableColumns() {
       ? `
         <div class="history-column-menu-head">
           <strong>Columnas ocultas</strong>
-          <button type="button" class="history-column-menu-close" aria-label="Cerrar">Ã—</button>
+        <button type="button" class="history-column-menu-close" aria-label="Cerrar">&times;</button>
         </div>
         <div class="history-column-menu-list">
           ${hiddenColumns
@@ -1190,7 +1190,7 @@ async function refresh() {
     const trail = await requestJson(`/api/trail/${encodeURIComponent(state.trackerDeviceId)}?limit=30`);
     renderTracker(trail || []);
   } catch (error) {
-    elements.apiStatus.textContent = 'Sin conexion';
+    elements.apiStatus.textContent = 'Sin conexión';
     console.error(error);
   }
 }

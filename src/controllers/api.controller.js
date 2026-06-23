@@ -27,7 +27,7 @@ function normalizePayload(body) {
   }
 
   if (!allowedSignals.has(signal)) {
-    throw new Error('signal invalido');
+    throw new Error('signal inválido');
   }
 
   return {

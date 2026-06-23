@@ -13,7 +13,7 @@ async function listen(port, dbInfo, retriesLeft = 10) {
     server.on('error', (error) => {
       if (error.code === 'EADDRINUSE' && retriesLeft > 0) {
         const nextPort = port + 1;
-        console.warn(`El puerto ${port} esta ocupado. Probando ${nextPort}...`);
+        console.warn(`El puerto ${port} está ocupado. Probando ${nextPort}...`);
         server.close(() => {
           listen(nextPort, dbInfo, retriesLeft - 1).then(resolve).catch(reject);
         });
@@ -31,7 +31,7 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
-  console.error('Failed to start server:', error);
+  console.error('No se pudo iniciar el servidor:', error);
   process.exit(1);
 });
 
