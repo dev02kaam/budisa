@@ -48,14 +48,36 @@ run('normaliza un evento gps valido', () => {
   });
 
   assert.equal(payload.signal, 'gps');
-  assert.equal(payload.kind, 'history_tracker');
-  assert.deepEqual(getTelemetryDestinations(payload), ['history', 'tracker']);
+  assert.equal(payload.kind, 'tracker');
+  assert.deepEqual(getTelemetryDestinations(payload), ['tracker']);
   assert.equal(payload.gpio, null);
   assert.equal(payload.gpioState, null);
   assert.equal(payload.gps.latitude, 41.3879);
   assert.equal(payload.gps.longitude, 2.16992);
   assert.equal(payload.gpsRaw.lat, 41.3879);
   assert.equal(payload.gpsRaw.lon, 2.16992);
+});
+
+run('normaliza un evento de bascula con gps para historico y tracker', () => {
+  const payload = normalizePayload({
+    eventId: 'evt-1-bascula-gps',
+    truckId: 'LAB001',
+    event: 'bascula_levantada',
+    gpio: 17,
+    gpioState: 0,
+    reason: 'GPIO17_LOW_DETECTADO',
+    thresholdSeconds: 10,
+    lat: 38.99372,
+    lon: -1.85479,
+    speed: 0,
+    gpsTimestamp: '2026-06-25T11:06:08Z'
+  });
+
+  assert.equal(payload.signal, 'bascula_levantada');
+  assert.equal(payload.kind, 'history_tracker');
+  assert.deepEqual(getTelemetryDestinations(payload), ['history', 'tracker']);
+  assert.equal(payload.gps.latitude, 38.99372);
+  assert.equal(payload.gps.longitude, -1.85479);
 });
 
 run('acepta un evento control heartbeat con gpioState null', () => {
@@ -89,5 +111,18 @@ run('rechaza un evento con senal no soportada', () => {
         event: 'otro_evento'
       }),
     /signal invalido/
+  );
+});
+
+run('rechaza un evento gps sin coordenadas', () => {
+  assert.throws(
+    () =>
+      normalizePayload({
+        truckId: 'LAB001',
+        event: 'gps',
+        lat: null,
+        lon: null
+      }),
+    /gps invalido/
   );
 });

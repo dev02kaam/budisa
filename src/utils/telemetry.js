@@ -42,6 +42,10 @@ function normalizePayload(body = {}) {
     throw new Error('signal invalido');
   }
 
+  if (isGpsOnly && !hasGps) {
+    throw new Error('gps invalido');
+  }
+
   const rawGpio = body.gpio ?? body.gpioPin;
   const rawGpioState = body.gpioState ?? body.gpio_state;
   const gpio = rawGpio === null || rawGpio === undefined || rawGpio === ''
@@ -78,13 +82,17 @@ function normalizePayload(body = {}) {
     battery: body.battery === undefined || body.battery === null ? null : Number(body.battery),
     source: body.source || 'raspberry',
     metadata: body.metadata || {},
-    kind: isControlHeartbeat ? 'state' : hasGps ? 'history_tracker' : 'history'
+    kind: isControlHeartbeat ? 'state' : isGpsOnly ? 'tracker' : hasGps ? 'history_tracker' : 'history'
   };
 }
 
 function getTelemetryDestinations(payload) {
   if (payload.kind === 'state' || payload.signal === 'control_heartbeat') {
     return ['state'];
+  }
+
+  if (payload.kind === 'tracker' || payload.signal === 'gps') {
+    return ['tracker'];
   }
 
   if (payload.kind === 'history_tracker' || (Number.isFinite(payload.gps?.latitude) && Number.isFinite(payload.gps?.longitude))) {

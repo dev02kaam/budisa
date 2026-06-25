@@ -69,11 +69,13 @@ async function createEvent(payload) {
 }
 
 async function getLatestEvents(limit = 20) {
-  return SensorEvent.find().sort({ receivedAt: -1 }).limit(limit).lean();
+  return SensorEvent.find({ signal: { $nin: ['control_heartbeat', 'gps'] } }).sort({ receivedAt: -1 }).limit(limit).lean();
 }
 
 async function getEvents(filters = {}, limit = 200) {
-  const query = {};
+  const query = {
+    signal: { $nin: ['control_heartbeat', 'gps'] }
+  };
 
   if (filters.deviceId) {
     query.deviceId = filters.deviceId;
@@ -132,8 +134,8 @@ async function getEvents(filters = {}, limit = 200) {
 
 async function getSummary() {
   const [latestEvent, totalEvents, subidaCount, bajadaCount, levantadaCount, estableCount, alertaCount] = await Promise.all([
-    SensorEvent.findOne({ signal: { $ne: 'control_heartbeat' } }).sort({ receivedAt: -1 }).lean(),
-    SensorEvent.countDocuments(),
+    SensorEvent.findOne({ signal: { $nin: ['control_heartbeat', 'gps'] } }).sort({ receivedAt: -1 }).lean(),
+    SensorEvent.countDocuments({ signal: { $nin: ['control_heartbeat', 'gps'] } }),
     SensorEvent.countDocuments({ signal: 'bascula_subida' }),
     SensorEvent.countDocuments({ signal: 'bascula_bajada' }),
     SensorEvent.countDocuments({ signal: 'bascula_levantada' }),
@@ -185,7 +187,7 @@ async function getDevices() {
 async function getInsights() {
   const lastHour = new Date(Date.now() - 60 * 60 * 1000);
   const [recentEvents, recentAlertCount] = await Promise.all([
-    SensorEvent.find({ receivedAt: { $gte: lastHour }, signal: { $ne: 'control_heartbeat' } }).sort({ receivedAt: -1 }).lean(),
+    SensorEvent.find({ receivedAt: { $gte: lastHour }, signal: { $nin: ['control_heartbeat', 'gps'] } }).sort({ receivedAt: -1 }).lean(),
     SensorEvent.countDocuments({ signal: 'alerta', receivedAt: { $gte: lastHour } })
   ]);
 

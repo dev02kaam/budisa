@@ -60,6 +60,9 @@ const state = {
   columns: loadColumns(),
   selectedSensors: loadSelectedSensors(),
   trackerDeviceId: 'raspberry-1',
+  gpsMapInstance: null,
+  gpsPolyline: null,
+  gpsMarkers: [],
   dragColumnKey: null,
   columnDialogSelected: new Set(),
   refreshTimer: null
@@ -189,10 +192,22 @@ function signalLabel(signal) {
   return SIGNAL_LABELS[signal] || signal || '-';
 }
 
+function getGpsLat(event) {
+  const value = event?.gps?.latitude ?? event?.lat;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function getGpsLng(event) {
+  const value = event?.gps?.longitude ?? event?.lon;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function formatGps(event) {
-  const lat = event.gps?.latitude ?? event.lat;
-  const lng = event.gps?.longitude ?? event.lon;
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+  const lat = getGpsLat(event);
+  const lng = getGpsLng(event);
+  if (lat === null || lng === null) {
     return 'Sin GPS';
   }
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
@@ -262,6 +277,14 @@ function setView(view) {
   if (elements.pageIcon) {
     elements.pageIcon.className = `page-icon page-icon-${view}`;
     elements.pageIcon.innerHTML = VIEW_ICONS[view] || VIEW_ICONS.dashboard;
+  }
+  if (view === 'tracker') {
+    window.setTimeout(() => {
+      state.gpsMapInstance?.invalidateSize();
+      if (state.trail.length) {
+        drawTrailMap(state.trail);
+      }
+    }, 0);
   }
   saveView();
 }
@@ -1083,8 +1106,8 @@ function applyCurrentFilters() {
 }
 
 function renderTracker(trailPoints = []) {
-  const visiblePoints = trailPoints.filter((event) => Number.isFinite(event.gps?.latitude ?? event.lat) && Number.isFinite(event.gps?.longitude ?? event.lon));
-  const trail = visiblePoints.slice(-30);
+  const visiblePoints = trailPoints.filter((event) => getGpsLat(event) !== null && getGpsLng(event) !== null);
+  const trail = visiblePoints.slice(-100);
   state.trail = trail;
   drawTrailMap(trail);
 
@@ -1098,7 +1121,7 @@ function renderTracker(trailPoints = []) {
             <div class="mini-item">
               <strong>${formatDate(event.receivedAt)}</strong>
               <div>${coords}</div>
-              <small>${signalLabel(event.signal)} | ${event.deviceId}</small>
+              <small>${signalLabel(event.signal)} | ${event.deviceId} | ${event.reason || 'GPS_FIX'}</small>
             </div>
           `;
         })
@@ -1107,53 +1130,78 @@ function renderTracker(trailPoints = []) {
 }
 
 function drawTrailMap(points) {
-  const svg = elements.gpsMap;
-  const width = 400;
-  const height = 320;
-  const padding = 20;
-  svg.innerHTML = '';
+  if (!elements.gpsMap) return;
 
-  for (let i = 0; i <= 8; i += 1) {
-    const y = padding + ((height - padding * 2) / 8) * i;
-    const x = padding + ((width - padding * 2) / 8) * i;
-    svg.insertAdjacentHTML('beforeend', `<line x1="${padding}" y1="${y}" x2="${width - padding}" y2="${y}" stroke="rgba(255,255,255,0.08)" />`);
-    svg.insertAdjacentHTML('beforeend', `<line x1="${x}" y1="${padding}" x2="${x}" y2="${height - padding}" stroke="rgba(255,255,255,0.08)" />`);
+  if (!window.L) {
+    elements.gpsMap.innerHTML = '<div class="mini-item"><strong>Mapa no disponible</strong><small>No se ha podido cargar Leaflet/OpenStreetMap.</small></div>';
+    elements.trailCount.textContent = '0 puntos';
+    elements.boundsInfo.textContent = 'Mapa no disponible';
+    return;
+  }
+
+  if (!state.gpsMapInstance) {
+    state.gpsMapInstance = L.map(elements.gpsMap, {
+      zoomControl: true,
+      scrollWheelZoom: true
+    }).setView([40.4168, -3.7038], 6);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(state.gpsMapInstance);
+  }
+
+  state.gpsMarkers.forEach((marker) => marker.remove());
+  state.gpsMarkers = [];
+  if (state.gpsPolyline) {
+    state.gpsPolyline.remove();
+    state.gpsPolyline = null;
   }
 
   if (!points.length) {
-    svg.insertAdjacentHTML('beforeend', `<text x="50%" y="50%" fill="var(--muted)" text-anchor="middle">Sin puntos GPS</text>`);
     elements.trailCount.textContent = '0 puntos';
     elements.boundsInfo.textContent = 'Sin datos';
     return;
   }
 
-  const lats = points.map((point) => point.gps?.latitude ?? point.lat);
-  const lngs = points.map((point) => point.gps?.longitude ?? point.lon);
+  const latLngs = points.map((point) => [getGpsLat(point), getGpsLng(point)]);
+  state.gpsPolyline = L.polyline(latLngs, {
+    color: getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#61d8b9',
+    weight: 4,
+    opacity: 0.9
+  }).addTo(state.gpsMapInstance);
+
+  points.forEach((point, index) => {
+    const isLatest = index === points.length - 1;
+    const icon = L.divIcon({
+      className: '',
+      html: `<span class="${isLatest ? 'gps-latest-marker' : 'gps-point-marker'}"></span>`,
+      iconSize: isLatest ? [28, 28] : [12, 12],
+      iconAnchor: isLatest ? [14, 14] : [6, 6]
+    });
+    const marker = L.marker(latLngs[index], { icon })
+      .bindPopup(`
+        <div class="gps-popup">
+          <strong>${escapeHtml(formatDate(point.receivedAt))}</strong>
+          <div>${escapeHtml(formatGps(point))}</div>
+          <small>${escapeHtml(point.reason || signalLabel(point.signal))}</small>
+        </div>
+      `)
+      .addTo(state.gpsMapInstance);
+    state.gpsMarkers.push(marker);
+  });
+
+  state.gpsMapInstance.fitBounds(L.latLngBounds(latLngs), {
+    padding: [32, 32],
+    maxZoom: 17
+  });
+
+  const lats = latLngs.map(([lat]) => lat);
+  const lngs = latLngs.map(([, lng]) => lng);
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
   const maxLng = Math.max(...lngs);
-  const latSpan = maxLat - minLat || 1;
-  const lngSpan = maxLng - minLng || 1;
-
-  const path = points
-    .map((point, index) => {
-      const x = padding + ((((point.gps?.longitude ?? point.lon) - minLng) / lngSpan) * (width - padding * 2));
-      const y = height - padding - ((((point.gps?.latitude ?? point.lat) - minLat) / latSpan) * (height - padding * 2));
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(' ');
-
-  svg.insertAdjacentHTML('beforeend', `<path d="${path}" fill="none" style="stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;" />`);
-
-  points.forEach((point, index) => {
-    const x = padding + ((((point.gps?.longitude ?? point.lon) - minLng) / lngSpan) * (width - padding * 2));
-    const y = height - padding - ((((point.gps?.latitude ?? point.lat) - minLat) / latSpan) * (height - padding * 2));
-    svg.insertAdjacentHTML(
-      'beforeend',
-      `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${index === points.length - 1 ? 6 : 4}" style="fill: ${index === points.length - 1 ? 'var(--accent-2)' : 'var(--text)'};" />`
-    );
-  });
 
   elements.trailCount.textContent = `${points.length} puntos`;
   elements.boundsInfo.textContent = `${minLat.toFixed(4)}, ${minLng.toFixed(4)} -> ${maxLat.toFixed(4)}, ${maxLng.toFixed(4)}`;
@@ -1189,18 +1237,18 @@ async function refresh() {
 
     state.summary = summary;
     state.allEvents = events || [];
-    state.historyEvents = state.allEvents.filter((event) => event.signal !== 'control_heartbeat');
+    state.historyEvents = state.allEvents.filter((event) => event.signal !== 'control_heartbeat' && event.signal !== 'gps');
     state.heartbeatEvents = state.allEvents.filter((event) => event.signal === 'control_heartbeat');
     state.devices = devices || [];
     state.latestEvent = summary.latestEvent || state.historyEvents[0] || null;
-    state.trackerDeviceId = state.latestEvent?.truckId || state.latestEvent?.deviceId || state.trackerDeviceId;
+    state.trackerDeviceId = state.latestEvent?.truckId || state.latestEvent?.deviceId || state.devices[0]?.deviceId || state.trackerDeviceId;
 
     elements.apiStatus.textContent = 'Conectado';
     renderSummary();
     drawSignalChart();
     applyCurrentFilters();
 
-    const trail = await requestJson(`/api/trail/${encodeURIComponent(state.trackerDeviceId)}?limit=30`);
+    const trail = await requestJson(`/api/trail/${encodeURIComponent(state.trackerDeviceId)}?limit=100`);
     renderTracker(trail || []);
   } catch (error) {
     elements.apiStatus.textContent = 'Sin conexión';
@@ -1276,6 +1324,7 @@ function setupListeners() {
       drawSignalChart();
     }
     if (state.trail.length) {
+      state.gpsMapInstance?.invalidateSize();
       drawTrailMap(state.trail);
     }
   });
