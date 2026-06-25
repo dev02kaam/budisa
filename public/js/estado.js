@@ -1,3 +1,4 @@
+(function () {
 const STORAGE_KEYS = {
   filters: 'budisa-heartbeat-filters',
   columns: 'budisa-history-columns',
@@ -472,3 +473,4 @@ function boot() {
 }
 
 boot();
+})();
