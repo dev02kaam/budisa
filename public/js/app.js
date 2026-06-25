@@ -40,7 +40,8 @@ const SIGNAL_LABELS = {
   bascula_bajada: 'Báscula bajada',
   bascula_levantada: 'Báscula levantada',
   estado_estable: 'Estado estable',
-  alerta: 'Alerta'
+  alerta: 'Alerta',
+  control_heartbeat: 'Heartbeat de servicio'
 };
 
 const state = {
@@ -48,6 +49,8 @@ const state = {
   view: localStorage.getItem(STORAGE_KEYS.view) || 'dashboard',
   summary: null,
   allEvents: [],
+  historyEvents: [],
+  heartbeatEvents: [],
   filteredEvents: [],
   latestEvent: null,
   trail: [],
@@ -225,6 +228,12 @@ const VIEW_ICONS = {
       <path d="M5 8H3v8h2zm16 0h-2v8h2z" opacity=".85"/>
     </svg>
   `,
+  estado: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 12h3.2l1.6-4.5c.3-.8 1.4-.8 1.7 0L12 17l1.9-5.2c.3-.8 1.4-.8 1.7 0l1.1 3.2H21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M12 3c4.9 0 9 4 9 9s-4.1 9-9 9-9-4-9-9 4.1-9 9-9Z" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".45"/>
+    </svg>
+  `,
   tracker: `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M12 2a7 7 0 0 0-7 7c0 4.7 7 13 7 13s7-8.3 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/>
@@ -244,6 +253,7 @@ function setView(view) {
   const titles = {
     dashboard: 'Panel de control',
     historico: 'Histórico inteligente',
+    estado: 'Estado de conectividad',
     tracker: 'Tracker GPS'
   };
 
@@ -292,7 +302,7 @@ function getSensorLabel(sensorId) {
 }
 
 function getLatestEventForSensor(sensorId) {
-  return state.allEvents.find((event) => event.deviceId === sensorId || event.truckId === sensorId) || null;
+  return state.historyEvents.find((event) => event.deviceId === sensorId || event.truckId === sensorId) || null;
 }
 
 function getSensorColor(index) {
@@ -1067,7 +1077,7 @@ function applyCurrentFilters() {
     return filter.value !== undefined && String(filter.value).trim() !== '';
   });
 
-  state.filteredEvents = filterEvents(state.allEvents, completeFilters);
+  state.filteredEvents = filterEvents(state.historyEvents, completeFilters);
   renderHistory();
 }
 
@@ -1178,8 +1188,10 @@ async function refresh() {
 
     state.summary = summary;
     state.allEvents = events || [];
+    state.historyEvents = state.allEvents.filter((event) => event.signal !== 'control_heartbeat');
+    state.heartbeatEvents = state.allEvents.filter((event) => event.signal === 'control_heartbeat');
     state.devices = devices || [];
-    state.latestEvent = summary.latestEvent || state.allEvents[0] || null;
+    state.latestEvent = summary.latestEvent || state.historyEvents[0] || null;
     state.trackerDeviceId = state.latestEvent?.truckId || state.latestEvent?.deviceId || state.trackerDeviceId;
 
     elements.apiStatus.textContent = 'Conectado';

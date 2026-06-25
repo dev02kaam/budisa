@@ -91,7 +91,7 @@ async function getEvents(filters = {}, limit = 200) {
 
 async function getSummary() {
   const [latestEvent, totalEvents, subidaCount, bajadaCount, levantadaCount, estableCount, alertaCount] = await Promise.all([
-    SensorEvent.findOne().sort({ receivedAt: -1 }).lean(),
+    SensorEvent.findOne({ signal: { $ne: 'control_heartbeat' } }).sort({ receivedAt: -1 }).lean(),
     SensorEvent.countDocuments(),
     SensorEvent.countDocuments({ signal: 'bascula_subida' }),
     SensorEvent.countDocuments({ signal: 'bascula_bajada' }),
@@ -144,7 +144,7 @@ async function getDevices() {
 async function getInsights() {
   const lastHour = new Date(Date.now() - 60 * 60 * 1000);
   const [recentEvents, recentAlertCount] = await Promise.all([
-    SensorEvent.find({ receivedAt: { $gte: lastHour } }).sort({ receivedAt: -1 }).lean(),
+    SensorEvent.find({ receivedAt: { $gte: lastHour }, signal: { $ne: 'control_heartbeat' } }).sort({ receivedAt: -1 }).lean(),
     SensorEvent.countDocuments({ signal: 'alerta', receivedAt: { $gte: lastHour } })
   ]);
 
