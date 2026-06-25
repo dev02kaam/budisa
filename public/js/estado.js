@@ -30,6 +30,7 @@ const FIELD_OPTIONS = [
 ];
 
 const SIGNAL_LABELS = {
+  gps: 'GPS',
   control_heartbeat: 'Heartbeat de servicio'
 };
 
@@ -104,8 +105,8 @@ function signalLabel(signal) {
 }
 
 function formatGps(event) {
-  const lat = event.gps?.latitude;
-  const lng = event.gps?.longitude;
+  const lat = event.gps?.latitude ?? event.lat;
+  const lng = event.gps?.longitude ?? event.lon;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return 'Sin GPS';
   }
@@ -444,7 +445,7 @@ function exportCsv() {
 
 async function refresh() {
   try {
-    state.events = await requestJson('/api/events/search?limit=1000&signal=control_heartbeat');
+    state.events = await requestJson('/api/heartbeats?limit=1000');
     applyFilters();
   } catch (error) {
     console.error(error);

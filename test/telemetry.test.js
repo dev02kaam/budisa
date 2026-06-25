@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 
-const { normalizePayload } = require('../src/utils/telemetry');
+const { normalizePayload, getTelemetryDestinations } = require('../src/utils/telemetry');
 
 function run(name, fn) {
   try {
@@ -28,10 +28,34 @@ run('normaliza un evento normal de bascula', () => {
   });
 
   assert.equal(payload.signal, 'bascula_bajada');
+  assert.equal(payload.kind, 'history');
+  assert.deepEqual(getTelemetryDestinations(payload), ['history']);
   assert.equal(payload.gpioState, 1);
   assert.equal(payload.reason, 'GPIO17_HIGH_RECUPERADO');
   assert.equal(payload.gps.latitude, null);
   assert.equal(payload.gps.longitude, null);
+});
+
+run('normaliza un evento gps valido', () => {
+  const payload = normalizePayload({
+    eventId: 'evt-1-gps',
+    truckId: 'LAB001',
+    event: 'gps',
+    lat: 41.3879,
+    lon: 2.16992,
+    speed: 12.5,
+    gpsTimestamp: '2026-06-25T11:06:08Z'
+  });
+
+  assert.equal(payload.signal, 'gps');
+  assert.equal(payload.kind, 'history_tracker');
+  assert.deepEqual(getTelemetryDestinations(payload), ['history', 'tracker']);
+  assert.equal(payload.gpio, null);
+  assert.equal(payload.gpioState, null);
+  assert.equal(payload.gps.latitude, 41.3879);
+  assert.equal(payload.gps.longitude, 2.16992);
+  assert.equal(payload.gpsRaw.lat, 41.3879);
+  assert.equal(payload.gpsRaw.lon, 2.16992);
 });
 
 run('acepta un evento control heartbeat con gpioState null', () => {
@@ -49,6 +73,8 @@ run('acepta un evento control heartbeat con gpioState null', () => {
   });
 
   assert.equal(payload.signal, 'control_heartbeat');
+  assert.equal(payload.kind, 'state');
+  assert.deepEqual(getTelemetryDestinations(payload), ['state']);
   assert.equal(payload.gpio, null);
   assert.equal(payload.gpioState, null);
   assert.equal(payload.reason, 'HEARTBEAT_SERVICIO');

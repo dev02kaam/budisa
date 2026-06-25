@@ -10,5 +10,6 @@ router.get('/events/search', api.search);
 router.get('/trail/:deviceId', api.trail);
 router.get('/devices', api.devices);
 router.get('/insights', api.insights);
+router.get('/heartbeats', api.heartbeats);
 
 module.exports = router;

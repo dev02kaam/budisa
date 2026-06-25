@@ -41,6 +41,7 @@ const SIGNAL_LABELS = {
   bascula_levantada: 'Báscula levantada',
   estado_estable: 'Estado estable',
   alerta: 'Alerta',
+  gps: 'GPS',
   control_heartbeat: 'Heartbeat de servicio'
 };
 
@@ -189,8 +190,8 @@ function signalLabel(signal) {
 }
 
 function formatGps(event) {
-  const lat = event.gps?.latitude;
-  const lng = event.gps?.longitude;
+  const lat = event.gps?.latitude ?? event.lat;
+  const lng = event.gps?.longitude ?? event.lon;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return 'Sin GPS';
   }
@@ -1082,7 +1083,7 @@ function applyCurrentFilters() {
 }
 
 function renderTracker(trailPoints = []) {
-  const visiblePoints = trailPoints.filter((event) => Number.isFinite(event.gps?.latitude) && Number.isFinite(event.gps?.longitude));
+  const visiblePoints = trailPoints.filter((event) => Number.isFinite(event.gps?.latitude ?? event.lat) && Number.isFinite(event.gps?.longitude ?? event.lon));
   const trail = visiblePoints.slice(-30);
   state.trail = trail;
   drawTrailMap(trail);
@@ -1126,8 +1127,8 @@ function drawTrailMap(points) {
     return;
   }
 
-  const lats = points.map((point) => point.gps.latitude);
-  const lngs = points.map((point) => point.gps.longitude);
+  const lats = points.map((point) => point.gps?.latitude ?? point.lat);
+  const lngs = points.map((point) => point.gps?.longitude ?? point.lon);
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
@@ -1137,8 +1138,8 @@ function drawTrailMap(points) {
 
   const path = points
     .map((point, index) => {
-      const x = padding + ((point.gps.longitude - minLng) / lngSpan) * (width - padding * 2);
-      const y = height - padding - ((point.gps.latitude - minLat) / latSpan) * (height - padding * 2);
+      const x = padding + ((((point.gps?.longitude ?? point.lon) - minLng) / lngSpan) * (width - padding * 2));
+      const y = height - padding - ((((point.gps?.latitude ?? point.lat) - minLat) / latSpan) * (height - padding * 2));
       return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
     })
     .join(' ');
@@ -1146,8 +1147,8 @@ function drawTrailMap(points) {
   svg.insertAdjacentHTML('beforeend', `<path d="${path}" fill="none" style="stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;" />`);
 
   points.forEach((point, index) => {
-    const x = padding + ((point.gps.longitude - minLng) / lngSpan) * (width - padding * 2);
-    const y = height - padding - ((point.gps.latitude - minLat) / latSpan) * (height - padding * 2);
+    const x = padding + ((((point.gps?.longitude ?? point.lon) - minLng) / lngSpan) * (width - padding * 2));
+    const y = height - padding - ((((point.gps?.latitude ?? point.lat) - minLat) / latSpan) * (height - padding * 2));
     svg.insertAdjacentHTML(
       'beforeend',
       `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${index === points.length - 1 ? 6 : 4}" style="fill: ${index === points.length - 1 ? 'var(--accent-2)' : 'var(--text)'};" />`

@@ -1,30 +1,71 @@
 const SensorEvent = require('../models/SensorEvent');
+const TrackerPoint = require('../models/TrackerPoint');
+const HeartbeatEvent = require('../models/HeartbeatEvent');
 const Device = require('../models/Device');
+const { getTelemetryDestinations } = require('../utils/telemetry');
+
+function buildCommonDoc(payload, category) {
+  const rawGps = payload.gpsRaw || {};
+  return {
+    ...payload,
+    category,
+    gps: payload.gps || {
+      latitude: rawGps.lat ?? payload.lat ?? null,
+      longitude: rawGps.lon ?? payload.lon ?? null,
+      altitude: null,
+      speed: rawGps.speed ?? payload.speed ?? null,
+      heading: null,
+      timestamp: rawGps.gpsTimestamp ?? payload.gpsTimestamp ?? null
+    },
+    lat: rawGps.lat ?? payload.lat ?? payload.gps?.latitude ?? null,
+    lon: rawGps.lon ?? payload.lon ?? payload.gps?.longitude ?? null,
+    speed: rawGps.speed ?? payload.speed ?? payload.gps?.speed ?? null,
+    gpsTimestamp: rawGps.gpsTimestamp ?? payload.gpsTimestamp ?? payload.gps?.timestamp ?? null
+  };
+}
 
 async function createEvent(payload) {
   const deviceId = payload.deviceId || payload.truckId;
-  const event = await SensorEvent.create({
+  const eventId = payload.eventId || `${payload.truckId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const basePayload = {
     ...payload,
-    eventId: payload.eventId || `${payload.truckId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    eventId,
     deviceId,
     truckId: payload.truckId || deviceId
-  });
+  };
+
+  const saved = [];
+
+  const destinations = getTelemetryDestinations(basePayload);
+
+  if (destinations.includes('state')) {
+    saved.push(await HeartbeatEvent.create(buildCommonDoc(basePayload, 'state')));
+  }
+
+  if (destinations.includes('history')) {
+    saved.push(await SensorEvent.create(buildCommonDoc(basePayload, 'history')));
+  }
+
+  if (destinations.includes('tracker')) {
+    saved.push(await TrackerPoint.create(buildCommonDoc(basePayload, 'tracker')));
+  }
+
   await Device.updateOne(
     { deviceId },
     {
       $set: {
         deviceId,
         name: payload.metadata?.deviceName || deviceId,
-        lastSeenAt: event.receivedAt,
+        lastSeenAt: saved[0].receivedAt,
         lastSignal: payload.signal,
-        lastGps: payload.gps,
+        lastGps: payload.gps || null,
         status: 'online'
       }
     },
     { upsert: true }
   );
 
-  return event;
+  return saved[0];
 }
 
 async function getLatestEvents(limit = 20) {
@@ -117,11 +158,11 @@ async function getSummary() {
 }
 
 async function getTrail(deviceId, limit = 100) {
-  return SensorEvent.find({ deviceId }).sort({ receivedAt: 1 }).limit(limit).lean();
+  return TrackerPoint.find({ deviceId }).sort({ receivedAt: 1 }).limit(limit).lean();
 }
 
 async function getTrailSummary(deviceId, limit = 30) {
-  const points = await SensorEvent.find({
+  const points = await TrackerPoint.find({
     deviceId,
     'gps.latitude': { $ne: null },
     'gps.longitude': { $ne: null }
@@ -161,6 +202,10 @@ async function getInsights() {
   };
 }
 
+async function getHeartbeats(limit = 200) {
+  return HeartbeatEvent.find().sort({ receivedAt: -1 }).limit(limit).lean();
+}
+
 module.exports = {
   createEvent,
   getLatestEvents,
@@ -169,5 +214,6 @@ module.exports = {
   getTrail,
   getTrailSummary,
   getDevices,
-  getInsights
+  getInsights,
+  getHeartbeats
 };

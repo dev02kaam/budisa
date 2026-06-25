@@ -83,6 +83,16 @@ async function insights(req, res, next) {
   }
 }
 
+async function heartbeats(req, res, next) {
+  try {
+    const limit = Math.min(Number(req.query.limit || 200), 1000);
+    const events = await eventService.getHeartbeats(limit);
+    res.json({ ok: true, data: events });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   ingestTelemetry,
   summary,
@@ -90,5 +100,6 @@ module.exports = {
   search,
   trail,
   devices,
-  insights
+  insights,
+  heartbeats
 };
