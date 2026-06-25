@@ -26,7 +26,8 @@ const SensorEventSchema = new mongoose.Schema(
         'bascula_bajada',
         'bascula_levantada',
         'estado_estable',
-        'alerta'
+        'alerta',
+        'control_heartbeat'
       ]
     },
     event: {
@@ -35,11 +36,11 @@ const SensorEventSchema = new mongoose.Schema(
     },
     gpio: {
       type: Number,
-      required: true
+      default: null
     },
     gpioState: {
       type: Number,
-      required: true
+      default: null
     },
     reason: {
       type: String,
