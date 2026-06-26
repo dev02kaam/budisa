@@ -29,6 +29,7 @@ Plataforma modular en Node.js, HTML, CSS y JavaScript puro para recibir telemetr
 - `GET /api/events?limit=20` histórico reciente
 - `GET /api/events/search?limit=200` búsqueda y filtros del histórico
 - `GET /api/trail/:deviceId?limit=100` recorrido GPS
+- `GET /api/tracker?from=...&to=...` mapa diario de todos los camiones con GPS
 - `GET /api/devices` listado de dispositivos
 - `GET /api/insights` señales de alerta y cambios rápidos
 

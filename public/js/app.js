@@ -4,7 +4,9 @@
   filters: 'budisa-filters',
   columns: 'budisa-history-columns',
   visibleColumns: 'budisa-visible-columns',
-  selectedSensors: 'budisa-selected-sensors'
+  selectedSensors: 'budisa-selected-sensors',
+  trackerDate: 'budisa-tracker-date',
+  trackerFollowToday: 'budisa-tracker-follow-today'
 };
 
 const SENSOR_COLORS = ['#6ea8ff', '#61d8b9', '#f6c177', '#b57bff', '#ff6c7a', '#8bd3ff'];
@@ -19,7 +21,6 @@ const COLUMN_DEFS = [
   { key: 'event', label: 'Evento' },
   { key: 'gpioState', label: 'GPIO' },
   { key: 'coords', label: 'GPS' },
-  { key: 'battery', label: 'Batería' },
   { key: 'reason', label: 'Motivo' }
 ];
 
@@ -30,7 +31,6 @@ const FIELD_OPTIONS = [
   { value: 'event', label: 'Evento' },
   { value: 'reason', label: 'Motivo' },
   { value: 'gpioState', label: 'GPIO' },
-  { value: 'battery', label: 'Batería' },
   { value: 'receivedAt', label: 'Fecha' },
   { value: 'hasGps', label: 'Tiene GPS' }
 ];
@@ -59,10 +59,15 @@ const state = {
   filters: loadFilters(),
   columns: loadColumns(),
   selectedSensors: loadSelectedSensors(),
+  trackerDate: loadTrackerDate(),
+  trackerFollowToday: loadTrackerFollowToday(),
   trackerDeviceId: 'raspberry-1',
   gpsMapInstance: null,
   gpsPolyline: null,
   gpsMarkers: [],
+  trackerLayers: [],
+  gpsPopupMapInstance: null,
+  gpsPopupMarker: null,
   dragColumnKey: null,
   columnDialogSelected: new Set(),
   refreshTimer: null
@@ -102,10 +107,17 @@ const elements = {
   historyHead: document.getElementById('historyHead'),
   eventsTable: document.getElementById('eventsTable'),
   historyCount: document.getElementById('historyCount'),
+  trackerDateInput: document.getElementById('trackerDateInput'),
+  trackerTodayBtn: document.getElementById('trackerTodayBtn'),
   gpsMap: document.getElementById('gpsMap'),
   trailCount: document.getElementById('trailCount'),
   boundsInfo: document.getElementById('boundsInfo'),
   trailList: document.getElementById('trailList'),
+  gpsPopupDialog: document.getElementById('gpsPopupDialog'),
+  gpsPopupMap: document.getElementById('gpsPopupMap'),
+  gpsPopupMeta: document.getElementById('gpsPopupMeta'),
+  gpsPopupTitle: document.getElementById('gpsPopupTitle'),
+  gpsPopupClose: document.getElementById('gpsPopupClose'),
   views: Array.from(document.querySelectorAll('.view')),
   navButtons: Array.from(document.querySelectorAll('.nav-item'))
 };
@@ -166,6 +178,49 @@ function saveSelectedSensors() {
   localStorage.setItem(STORAGE_KEYS.selectedSensors, JSON.stringify(state.selectedSensors));
 }
 
+function loadTrackerDate() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.trackerDate);
+    if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return raw;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return getTodayIsoDate();
+}
+
+function saveTrackerDate() {
+  localStorage.setItem(STORAGE_KEYS.trackerDate, state.trackerDate);
+}
+
+function loadTrackerFollowToday() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.trackerFollowToday);
+    return raw === null ? true : raw === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function saveTrackerFollowToday() {
+  localStorage.setItem(STORAGE_KEYS.trackerFollowToday, String(state.trackerFollowToday));
+}
+
+function getTodayIsoDate() {
+  return new Date().toLocaleDateString('en-CA');
+}
+
+function buildDayRange(dateIso) {
+  const [year, month, day] = String(dateIso || getTodayIsoDate()).split('-').map((value) => Number(value));
+  const start = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const end = new Date(year, month - 1, day + 1, 0, 0, 0, 0);
+  return {
+    from: start.toISOString(),
+    to: end.toISOString()
+  };
+}
+
 function getVisibleSet() {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.visibleColumns);
@@ -218,7 +273,6 @@ function formatCell(event, key) {
   if (key === 'signal') return signalLabel(event.signal);
   if (key === 'coords') return formatGps(event);
   if (key === 'gpioState') return String(event.gpioState ?? '-');
-  if (key === 'battery') return event.battery ?? '-';
   if (key === 'reason') return event.reason || '-';
   return event[key] ?? '-';
 }
@@ -285,6 +339,7 @@ function setView(view) {
         drawTrailMap(state.trail);
       }
     }, 0);
+    syncTrackerDateControls();
   }
   saveView();
 }
@@ -407,7 +462,6 @@ function renderSensorStack() {
       const signal = latest ? signalLabel(latest.signal) : 'Sin datos';
       const signalValue = latest?.signal || '-';
       const receivedAt = latest ? formatDate(latest.receivedAt) : '-';
-      const battery = latest?.battery ?? '-';
       const coords = latest ? formatGps(latest) : '-';
 
       return `
@@ -427,7 +481,6 @@ function renderSensorStack() {
           <div class="sensor-metrics">
             <div><span>Señal</span><strong>${escapeHtml(signalValue)}</strong></div>
             <div><span>Hora</span><strong>${escapeHtml(receivedAt)}</strong></div>
-            <div><span>Batería</span><strong>${escapeHtml(String(battery))}</strong></div>
             <div><span>GPS</span><strong>${escapeHtml(coords)}</strong></div>
           </div>
         </article>
@@ -652,7 +705,7 @@ function filterEvents(events, filters) {
         return true;
       }
 
-      if (['battery', 'gpioState'].includes(filter.field)) {
+      if (['gpioState'].includes(filter.field)) {
         const numberValue = Number(fieldValue);
         const compare = Number(value);
         if (Number.isNaN(numberValue) || Number.isNaN(compare)) return false;
@@ -685,7 +738,6 @@ function getEventFieldValue(event, field) {
   if (field === 'truckId') return event.truckId || event.deviceId;
   if (field === 'event') return event.event;
   if (field === 'reason') return event.reason;
-  if (field === 'battery') return event.battery;
   if (field === 'gpioState') return event.gpioState;
   if (field === 'receivedAt') return event.receivedAt;
   if (field === 'hasGps') return Number.isFinite(event.gps?.latitude) && Number.isFinite(event.gps?.longitude);
@@ -719,7 +771,6 @@ function getFilterOperators(field) {
     event: ['contains', 'equals', 'starts', 'ends'],
     reason: ['contains', 'equals', 'starts', 'ends'],
     gpioState: ['equals', 'not_equals'],
-    battery: ['equals', 'not_equals', 'gt', 'gte', 'lt', 'lte'],
     receivedAt: ['after', 'before'],
     hasGps: ['yes', 'no']
   };
@@ -779,7 +830,7 @@ function renderFilters() {
   elements.filterBuilder.innerHTML = state.filters
     .map((filter) => {
       const operators = getFilterOperators(filter.field);
-      const inputType = filter.field === 'receivedAt' ? 'date' : ['battery', 'gpioState'].includes(filter.field) ? 'number' : 'text';
+      const inputType = filter.field === 'receivedAt' ? 'date' : ['gpioState'].includes(filter.field) ? 'number' : 'text';
       const options = FIELD_OPTIONS.map(
         (option) => `<option value="${option.value}" ${option.value === filter.field ? 'selected' : ''}>${option.label}</option>`
       ).join('');
@@ -1075,6 +1126,36 @@ function closeColumnDialog() {
   }
 }
 
+function renderHistoryCell(event, key) {
+  if (key === 'coords') {
+    const lat = getGpsLat(event);
+    const lng = getGpsLng(event);
+    if (lat === null || lng === null) {
+      return 'Sin GPS';
+    }
+
+    return `
+      <div class="history-gps-cell">
+        <span>${escapeHtml(formatGps(event))}</span>
+        <button
+          type="button"
+          class="gps-history-btn"
+          data-lat="${lat}"
+          data-lng="${lng}"
+          data-received-at="${escapeHtml(String(event.receivedAt || ''))}"
+          data-signal="${escapeHtml(String(event.signal || ''))}"
+          data-truck-id="${escapeHtml(String(event.truckId || event.deviceId || ''))}"
+          data-reason="${escapeHtml(String(event.reason || ''))}"
+        >
+          Ver mapa
+        </button>
+      </div>
+    `;
+  }
+
+  return escapeHtml(String(formatCell(event, key)));
+}
+
 function renderHistory() {
   const visibleColumns = getVisibleColumns();
   if (!visibleColumns.length) {
@@ -1086,7 +1167,7 @@ function renderHistory() {
   elements.eventsTable.innerHTML = state.filteredEvents
     .map((event) => {
       const cells = visibleColumns
-        .map((key) => `<td>${escapeHtml(String(formatCell(event, key)))}</td>`)
+        .map((key) => `<td>${renderHistoryCell(event, key)}</td>`)
         .join('');
       return `<tr>${cells}</tr>`;
     })
@@ -1105,31 +1186,64 @@ function applyCurrentFilters() {
   renderHistory();
 }
 
+function getTrackerPointColor(index) {
+  return SENSOR_COLORS[index % SENSOR_COLORS.length];
+}
+
+function buildTrackerGroups(points) {
+  const groups = new Map();
+  points.forEach((point) => {
+    const truckKey = point.truckId || point.deviceId || 'Sin camión';
+    if (!groups.has(truckKey)) {
+      groups.set(truckKey, []);
+    }
+    groups.get(truckKey).push(point);
+  });
+  return [...groups.entries()].map(([truckId, truckPoints]) => ({
+    truckId,
+    points: truckPoints.sort((left, right) => new Date(left.receivedAt) - new Date(right.receivedAt))
+  }));
+}
+
 function renderTracker(trailPoints = []) {
   const visiblePoints = trailPoints.filter((event) => getGpsLat(event) !== null && getGpsLng(event) !== null);
-  const trail = visiblePoints.slice(-100);
+  const trail = visiblePoints.slice(-1000);
   state.trail = trail;
-  drawTrailMap(trail);
+  const groups = buildTrackerGroups(trail);
+  drawTrailMap(groups);
 
-  elements.trailList.innerHTML = trail.length
-    ? trail
+  if (!elements.trailList) return;
+
+  elements.trailList.innerHTML = groups.length
+    ? groups
         .slice()
         .reverse()
-        .map((event) => {
-          const coords = formatGps(event);
+        .map((group, index) => {
+          const latest = group.points[group.points.length - 1];
+          const recent = group.points.slice(-3).reverse();
+          const color = getTrackerPointColor(index);
           return `
-            <div class="mini-item">
-              <strong>${formatDate(event.receivedAt)}</strong>
-              <div>${coords}</div>
-              <small>${signalLabel(event.signal)} | ${event.deviceId} | ${event.reason || 'GPS_FIX'}</small>
-            </div>
+            <article class="mini-item tracker-group" style="--tracker-color: ${color}">
+              <strong>${escapeHtml(group.truckId)}</strong>
+              <div>${escapeHtml(formatGps(latest))}</div>
+              <small>${group.points.length} puntos · ${escapeHtml(latest?.signal ? signalLabel(latest.signal) : 'GPS')}</small>
+              <div class="tracker-group-points">
+                ${recent
+                  .map(
+                    (event) => `
+                      <span>${escapeHtml(formatDate(event.receivedAt))} · ${escapeHtml(signalLabel(event.signal))}</span>
+                    `
+                  )
+                  .join('')}
+              </div>
+            </article>
           `;
         })
         .join('')
     : '<div class="mini-item"><strong>Sin puntos</strong><small>No hay posiciones GPS guardadas</small></div>';
 }
 
-function drawTrailMap(points) {
+function drawTrailMap(groups) {
   if (!elements.gpsMap) return;
 
   if (!window.L) {
@@ -1153,58 +1267,163 @@ function drawTrailMap(points) {
 
   state.gpsMarkers.forEach((marker) => marker.remove());
   state.gpsMarkers = [];
-  if (state.gpsPolyline) {
-    state.gpsPolyline.remove();
-    state.gpsPolyline = null;
-  }
 
-  if (!points.length) {
+  if (!groups.length) {
     elements.trailCount.textContent = '0 puntos';
     elements.boundsInfo.textContent = 'Sin datos';
     return;
   }
 
-  const latLngs = points.map((point) => [getGpsLat(point), getGpsLng(point)]);
-  state.gpsPolyline = L.polyline(latLngs, {
-    color: getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#61d8b9',
-    weight: 4,
-    opacity: 0.9
-  }).addTo(state.gpsMapInstance);
+  const allLatLngs = [];
+  const bounds = [];
 
-  points.forEach((point, index) => {
-    const isLatest = index === points.length - 1;
-    const icon = L.divIcon({
-      className: '',
-      html: `<span class="${isLatest ? 'gps-latest-marker' : 'gps-point-marker'}"></span>`,
-      iconSize: isLatest ? [28, 28] : [12, 12],
-      iconAnchor: isLatest ? [14, 14] : [6, 6]
+  groups.forEach((group, groupIndex) => {
+    const color = getTrackerPointColor(groupIndex);
+    const latLngs = group.points.map((point) => [getGpsLat(point), getGpsLng(point)]);
+    allLatLngs.push(...latLngs);
+
+    const line = L.polyline(latLngs, {
+      color,
+      weight: 4,
+      opacity: 0.82
+    }).addTo(state.gpsMapInstance);
+    state.gpsMarkers.push(line);
+
+    group.points.forEach((point, index) => {
+      const lat = getGpsLat(point);
+      const lng = getGpsLng(point);
+      const isLatest = index === group.points.length - 1;
+      const isLift = point.signal === 'bascula_subida';
+      const isLower = point.signal === 'bascula_bajada';
+      const iconClass = isLift
+        ? 'gps-event-marker gps-event-marker-up'
+        : isLower
+          ? 'gps-event-marker gps-event-marker-down'
+          : isLatest
+            ? 'gps-truck-marker'
+            : 'gps-point-marker';
+      const icon = L.divIcon({
+        className: '',
+        html: `<span class="${iconClass}" style="--marker-color: ${color}"></span>`,
+        iconSize: isLift || isLower ? [24, 24] : isLatest ? [28, 28] : [12, 12],
+        iconAnchor: isLift || isLower ? [12, 12] : isLatest ? [14, 14] : [6, 6]
+      });
+      const marker = L.marker([lat, lng], { icon })
+        .bindPopup(`
+          <div class="gps-popup">
+            <strong>${escapeHtml(group.truckId)}</strong>
+            <div>${escapeHtml(formatDate(point.receivedAt))}</div>
+            <div>${escapeHtml(formatGps(point))}</div>
+            <small>${escapeHtml(point.reason || signalLabel(point.signal))}</small>
+          </div>
+        `)
+        .addTo(state.gpsMapInstance);
+      state.gpsMarkers.push(marker);
+      bounds.push([lat, lng]);
     });
-    const marker = L.marker(latLngs[index], { icon })
-      .bindPopup(`
-        <div class="gps-popup">
-          <strong>${escapeHtml(formatDate(point.receivedAt))}</strong>
-          <div>${escapeHtml(formatGps(point))}</div>
-          <small>${escapeHtml(point.reason || signalLabel(point.signal))}</small>
-        </div>
-      `)
-      .addTo(state.gpsMapInstance);
-    state.gpsMarkers.push(marker);
   });
 
-  state.gpsMapInstance.fitBounds(L.latLngBounds(latLngs), {
+  state.gpsMapInstance.fitBounds(L.latLngBounds(allLatLngs), {
     padding: [32, 32],
     maxZoom: 17
   });
 
-  const lats = latLngs.map(([lat]) => lat);
-  const lngs = latLngs.map(([, lng]) => lng);
+  const lats = bounds.map(([lat]) => lat);
+  const lngs = bounds.map(([, lng]) => lng);
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
   const maxLng = Math.max(...lngs);
 
-  elements.trailCount.textContent = `${points.length} puntos`;
+  const truckCount = groups.length;
+  elements.trailCount.textContent = `${allLatLngs.length} puntos · ${truckCount} camiones`;
   elements.boundsInfo.textContent = `${minLat.toFixed(4)}, ${minLng.toFixed(4)} -> ${maxLat.toFixed(4)}, ${maxLng.toFixed(4)}`;
+}
+
+function openGpsPopup(point) {
+  if (!point || !elements.gpsPopupDialog || !elements.gpsPopupMap) return;
+
+  if (elements.gpsPopupTitle) {
+    elements.gpsPopupTitle.textContent = point.truckId || point.deviceId || 'Punto GPS';
+  }
+  if (elements.gpsPopupMeta) {
+    elements.gpsPopupMeta.textContent = `${formatDate(point.receivedAt)} · ${formatGps(point)} · ${signalLabel(point.signal)}`;
+  }
+
+  if (!window.L) {
+    elements.gpsPopupMap.innerHTML = '<div class="mini-item"><strong>Mapa no disponible</strong><small>No se ha podido cargar Leaflet/OpenStreetMap.</small></div>';
+  } else {
+    const lat = getGpsLat(point);
+    const lng = getGpsLng(point);
+
+    if (!state.gpsPopupMapInstance) {
+      state.gpsPopupMapInstance = L.map(elements.gpsPopupMap, {
+        zoomControl: true,
+        scrollWheelZoom: true
+      }).setView([lat, lng], 16);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(state.gpsPopupMapInstance);
+    } else {
+      state.gpsPopupMapInstance.setView([lat, lng], 16);
+    }
+
+    if (state.gpsPopupMarker) {
+      state.gpsPopupMarker.remove();
+    }
+
+    const popupClass = point.signal === 'bascula_subida'
+      ? 'gps-event-marker gps-event-marker-up'
+      : point.signal === 'bascula_bajada'
+        ? 'gps-event-marker gps-event-marker-down'
+        : 'gps-truck-marker';
+
+    state.gpsPopupMarker = L.marker([lat, lng], {
+      icon: L.divIcon({
+        className: '',
+        html: `<span class="${popupClass}"></span>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      })
+    }).addTo(state.gpsPopupMapInstance);
+
+    window.requestAnimationFrame(() => {
+      state.gpsPopupMapInstance?.invalidateSize();
+      state.gpsPopupMapInstance?.setView([lat, lng], 16);
+    });
+  }
+
+  if (typeof elements.gpsPopupDialog.showModal === 'function') {
+    elements.gpsPopupDialog.showModal();
+  } else {
+    elements.gpsPopupDialog.setAttribute('open', '');
+  }
+}
+
+function closeGpsPopup() {
+  if (!elements.gpsPopupDialog) return;
+  if (elements.gpsPopupDialog.open) {
+    elements.gpsPopupDialog.close();
+  } else {
+    elements.gpsPopupDialog.removeAttribute('open');
+  }
+}
+
+function syncTrackerDateControls() {
+  if (!elements.trackerDateInput) return;
+  elements.trackerDateInput.value = state.trackerFollowToday ? getTodayIsoDate() : state.trackerDate;
+}
+
+function getTrackerRequestRange() {
+  const selectedDate = state.trackerFollowToday ? getTodayIsoDate() : state.trackerDate || getTodayIsoDate();
+  if (state.trackerFollowToday) {
+    state.trackerDate = selectedDate;
+    saveTrackerDate();
+  }
+  const range = buildDayRange(selectedDate);
+  return { selectedDate, ...range };
 }
 
 function exportCsv() {
@@ -1247,9 +1466,15 @@ async function refresh() {
     renderSummary();
     drawSignalChart();
     applyCurrentFilters();
+    syncTrackerDateControls();
 
-    const trail = await requestJson(`/api/trail/${encodeURIComponent(state.trackerDeviceId)}?limit=100`);
-    renderTracker(trail || []);
+    const { selectedDate, from, to } = getTrackerRequestRange();
+    const trackerPoints = await requestJson(
+      `/api/tracker?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=5000`
+    );
+    state.trackerDate = selectedDate;
+    saveTrackerDate();
+    renderTracker(trackerPoints || []);
   } catch (error) {
     elements.apiStatus.textContent = 'Sin conexión';
     console.error(error);
@@ -1278,6 +1503,36 @@ function setupListeners() {
     renderTableColumns();
   });
   elements.exportCsvBtn.addEventListener('click', exportCsv);
+  elements.eventsTable?.addEventListener('click', (event) => {
+    const button = event.target.closest?.('.gps-history-btn');
+    if (!button) return;
+    openGpsPopup({
+      truckId: button.dataset.truckId || '',
+      deviceId: button.dataset.truckId || '',
+      receivedAt: button.dataset.receivedAt || '',
+      signal: button.dataset.signal || 'gps',
+      reason: button.dataset.reason || '',
+      gps: {
+        latitude: Number(button.dataset.lat),
+        longitude: Number(button.dataset.lng)
+      }
+    });
+  });
+  elements.trackerDateInput?.addEventListener('change', () => {
+    state.trackerFollowToday = false;
+    state.trackerDate = elements.trackerDateInput.value || getTodayIsoDate();
+    saveTrackerDate();
+    saveTrackerFollowToday();
+    refresh();
+  });
+  elements.trackerTodayBtn?.addEventListener('click', () => {
+    state.trackerFollowToday = true;
+    state.trackerDate = getTodayIsoDate();
+    saveTrackerDate();
+    saveTrackerFollowToday();
+    syncTrackerDateControls();
+    refresh();
+  });
 
   elements.sensorSelect?.addEventListener('change', () => {
     if (elements.sensorSelect.value) {
@@ -1301,6 +1556,16 @@ function setupListeners() {
   elements.columnDialog?.addEventListener('click', (event) => {
     if (event.target === elements.columnDialog) {
       closeColumnDialog();
+    }
+  });
+  elements.gpsPopupClose?.addEventListener('click', closeGpsPopup);
+  elements.gpsPopupDialog?.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closeGpsPopup();
+  });
+  elements.gpsPopupDialog?.addEventListener('click', (event) => {
+    if (event.target === elements.gpsPopupDialog) {
+      closeGpsPopup();
     }
   });
   elements.columnDialogList?.addEventListener('change', (event) => {
@@ -1327,11 +1592,15 @@ function setupListeners() {
       state.gpsMapInstance?.invalidateSize();
       drawTrailMap(state.trail);
     }
+    if (elements.gpsPopupDialog?.open) {
+      state.gpsPopupMapInstance?.invalidateSize();
+    }
   });
 }
 
 function boot() {
   applyTheme();
+  syncTrackerDateControls();
   setView(state.view);
   renderFilters();
   renderTableColumns();

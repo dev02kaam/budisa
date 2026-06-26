@@ -79,7 +79,6 @@ function normalizePayload(body = {}) {
       speed: body.speed ?? body.gps?.speed ?? null,
       gpsTimestamp: body.gpsTimestamp ?? body.gps_timestamp ?? body.gps?.timestamp ?? null
     },
-    battery: body.battery === undefined || body.battery === null ? null : Number(body.battery),
     source: body.source || 'raspberry',
     metadata: body.metadata || {},
     kind: isControlHeartbeat ? 'state' : isGpsOnly ? 'tracker' : hasGps ? 'history_tracker' : 'history'

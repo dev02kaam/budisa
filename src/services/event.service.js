@@ -119,16 +119,6 @@ async function getEvents(filters = {}, limit = 200) {
     ];
   }
 
-  if (filters.minBattery !== undefined && filters.minBattery !== '') {
-    query.battery = query.battery || {};
-    query.battery.$gte = Number(filters.minBattery);
-  }
-
-  if (filters.maxBattery !== undefined && filters.maxBattery !== '') {
-    query.battery = query.battery || {};
-    query.battery.$lte = Number(filters.maxBattery);
-  }
-
   return SensorEvent.find(query).sort({ receivedAt: -1 }).limit(limit).lean();
 }
 
@@ -161,6 +151,33 @@ async function getSummary() {
 
 async function getTrail(deviceId, limit = 100) {
   return TrackerPoint.find({ deviceId }).sort({ receivedAt: 1 }).limit(limit).lean();
+}
+
+async function getTrackerPoints(filters = {}, limit = 5000) {
+  const query = {
+    'gps.latitude': { $ne: null },
+    'gps.longitude': { $ne: null }
+  };
+
+  if (filters.deviceId) {
+    query.deviceId = filters.deviceId;
+  }
+
+  if (filters.truckId) {
+    query.truckId = filters.truckId;
+  }
+
+  if (filters.from || filters.to) {
+    query.receivedAt = {};
+    if (filters.from) {
+      query.receivedAt.$gte = new Date(filters.from);
+    }
+    if (filters.to) {
+      query.receivedAt.$lte = new Date(filters.to);
+    }
+  }
+
+  return TrackerPoint.find(query).sort({ receivedAt: 1 }).limit(limit).lean();
 }
 
 async function getTrailSummary(deviceId, limit = 30) {
@@ -214,6 +231,7 @@ module.exports = {
   getEvents,
   getSummary,
   getTrail,
+  getTrackerPoints,
   getTrailSummary,
   getDevices,
   getInsights,

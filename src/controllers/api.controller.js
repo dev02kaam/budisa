@@ -42,9 +42,7 @@ async function search(req, res, next) {
         hasGps: String(req.query.hasGps || '').toLowerCase() === 'true',
         from: req.query.from,
         to: req.query.to,
-        q: req.query.q,
-        minBattery: req.query.minBattery,
-        maxBattery: req.query.maxBattery
+        q: req.query.q
       },
       limit
     );
@@ -59,6 +57,24 @@ async function trail(req, res, next) {
     const limit = Math.min(Number(req.query.limit || 100), 500);
     const deviceId = String(req.params.deviceId || 'raspberry-1');
     const points = await eventService.getTrail(deviceId, limit);
+    res.json({ ok: true, data: points });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function tracker(req, res, next) {
+  try {
+    const limit = Math.min(Number(req.query.limit || 5000), 10000);
+    const points = await eventService.getTrackerPoints(
+      {
+        deviceId: req.query.deviceId,
+        truckId: req.query.truckId,
+        from: req.query.from,
+        to: req.query.to
+      },
+      limit
+    );
     res.json({ ok: true, data: points });
   } catch (error) {
     next(error);
@@ -99,6 +115,7 @@ module.exports = {
   latest,
   search,
   trail,
+  tracker,
   devices,
   insights,
   heartbeats

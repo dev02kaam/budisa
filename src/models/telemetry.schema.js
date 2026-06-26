@@ -99,10 +99,6 @@ function createTelemetrySchema() {
           default: null
         }
       },
-      battery: {
-        type: Number,
-        default: null
-      },
       source: {
         type: String,
         default: 'raspberry'

@@ -13,7 +13,6 @@ const COLUMN_DEFS = [
   { key: 'event', label: 'Evento' },
   { key: 'gpioState', label: 'GPIO' },
   { key: 'coords', label: 'GPS' },
-  { key: 'battery', label: 'Bateria' },
   { key: 'reason', label: 'Motivo' }
 ];
 
@@ -24,7 +23,6 @@ const FIELD_OPTIONS = [
   { value: 'event', label: 'Evento' },
   { value: 'reason', label: 'Motivo' },
   { value: 'gpioState', label: 'GPIO' },
-  { value: 'battery', label: 'Bateria' },
   { value: 'receivedAt', label: 'Fecha' },
   { value: 'hasGps', label: 'Tiene GPS' }
 ];
@@ -118,7 +116,6 @@ function formatCell(event, key) {
   if (key === 'signal') return signalLabel(event.signal);
   if (key === 'coords') return formatGps(event);
   if (key === 'gpioState') return String(event.gpioState ?? '-');
-  if (key === 'battery') return event.battery ?? '-';
   if (key === 'reason') return event.reason || '-';
   return event[key] ?? '-';
 }
@@ -129,7 +126,6 @@ function getEventFieldValue(event, field) {
   if (field === 'truckId') return event.truckId || event.deviceId;
   if (field === 'event') return event.event;
   if (field === 'reason') return event.reason;
-  if (field === 'battery') return event.battery;
   if (field === 'gpioState') return event.gpioState;
   if (field === 'receivedAt') return event.receivedAt;
   if (field === 'hasGps') return Number.isFinite(event.gps?.latitude) && Number.isFinite(event.gps?.longitude);
@@ -163,7 +159,6 @@ function getFilterOperators(field) {
     event: ['contains', 'equals', 'starts', 'ends'],
     reason: ['contains', 'equals', 'starts', 'ends'],
     gpioState: ['equals', 'not_equals'],
-    battery: ['equals', 'not_equals', 'gt', 'gte', 'lt', 'lte'],
     receivedAt: ['after', 'before'],
     hasGps: ['yes', 'no']
   };
@@ -214,7 +209,7 @@ function filterEvents(events, filters) {
         return true;
       }
 
-      if (['battery', 'gpioState'].includes(filter.field)) {
+      if (['gpioState'].includes(filter.field)) {
         const numberValue = Number(fieldValue);
         const compare = Number(value);
         if (Number.isNaN(numberValue) || Number.isNaN(compare)) return false;
@@ -299,7 +294,7 @@ function renderFilters() {
   elements.filterBuilder.innerHTML = state.filters
     .map((filter) => {
       const operators = getFilterOperators(filter.field);
-      const inputType = filter.field === 'receivedAt' ? 'date' : ['battery', 'gpioState'].includes(filter.field) ? 'number' : 'text';
+      const inputType = filter.field === 'receivedAt' ? 'date' : ['gpioState'].includes(filter.field) ? 'number' : 'text';
       const options = FIELD_OPTIONS.map(
         (option) => `<option value="${option.value}" ${option.value === filter.field ? 'selected' : ''}>${option.label}</option>`
       ).join('');

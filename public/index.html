@@ -218,8 +218,14 @@
         <section class="grid grid-tracker">
           <article class="panel panel-wide">
             <div class="panel-header">
-              <h3>Tracker GPS</h3>
-              <p>Ruta de puntos recientes</p>
+              <div>
+                <h3>Tracker GPS</h3>
+                <p>Ruta diaria por camión con puntos y eventos de báscula</p>
+              </div>
+              <div class="tracker-controls">
+                <input id="trackerDateInput" type="date" aria-label="Seleccionar día del tracker" />
+                <button class="ghost-btn tracker-today-btn" id="trackerTodayBtn" type="button">Hoy</button>
+              </div>
             </div>
             <div class="tracker-box">
               <div id="gpsMap" role="img" aria-label="Mapa GPS con OpenStreetMap"></div>
@@ -265,6 +271,19 @@
         <button class="ghost-btn" type="button" id="columnDialogCancel">Cancelar</button>
         <button class="primary-btn" type="button" id="columnDialogAdd" disabled>Añadir</button>
       </div>
+    </form>
+  </dialog>
+
+  <dialog class="gps-popup-dialog" id="gpsPopupDialog">
+    <form method="dialog" class="gps-popup-card">
+      <div class="column-dialog-header">
+        <div>
+          <h3 id="gpsPopupTitle">Punto GPS</h3>
+          <p id="gpsPopupMeta">Detalle del punto seleccionado</p>
+        </div>
+        <button class="column-dialog-close" type="button" id="gpsPopupClose" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="gps-popup-map" id="gpsPopupMap" aria-label="Mapa de punto GPS seleccionado"></div>
     </form>
   </dialog>
 
