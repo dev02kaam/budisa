@@ -72,8 +72,20 @@ La API de Budisa acepta ese formato directamente y también sigue aceptando una 
 
 1. Instalar dependencias: `npm install`
 2. Crear `.env` a partir de `.env.example`
-3. Levantar MongoDB local o remoto
+3. Definir `MONGODB_URI` con la base productiva o con tu Mongo local
 4. Ejecutar `npm run dev`
+
+## Configuracion `.env`
+
+```env
+PORT=3002
+NODE_ENV=development
+MONGODB_URI=mongodb+srv://usuario:password@cluster.mongodb.net/budisa
+USE_MEMORY_MONGO=false
+```
+
+En desarrollo, si Mongo no responde, la app puede caer a memoria temporal para no bloquearte.
+En produccion, si la conexion a Mongo falla, el servidor aborta el arranque para evitar perder persistencia sin darte cuenta.
 
 ## Ideas extra que ya deja preparada la base
 

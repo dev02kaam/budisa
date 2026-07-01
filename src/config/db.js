@@ -16,7 +16,11 @@ async function connectDb() {
       return { mode: 'external', uri: config.mongoUri };
     }
   } catch (error) {
-    console.warn('No se pudo conectar a MongoDB local, activando memoria temporal.');
+    if (config.nodeEnv === 'production') {
+      throw new Error(`No se pudo conectar a MongoDB productiva: ${error.message}`);
+    }
+
+    console.warn('No se pudo conectar a MongoDB externa, activando memoria temporal.');
   }
 
   memoryServer = await MongoMemoryServer.create({
