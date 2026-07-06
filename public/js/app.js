@@ -1260,12 +1260,59 @@ function buildTrackerGroups(points) {
   }));
 }
 
+function haversineDistanceMeters(left, right) {
+  const lat1 = getGpsLat(left);
+  const lon1 = getGpsLng(left);
+  const lat2 = getGpsLat(right);
+  const lon2 = getGpsLng(right);
+
+  if ([lat1, lon1, lat2, lon2].some((value) => value === null)) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const toRad = (degrees) => (degrees * Math.PI) / 180;
+  const earthRadius = 6371000;
+  const deltaLat = toRad(lat2 - lat1);
+  const deltaLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(deltaLon / 2) ** 2;
+  return 2 * earthRadius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function compactTrackerPoints(points, minDistanceMeters = 500) {
+  if (!Array.isArray(points) || !points.length) {
+    return [];
+  }
+
+  const compacted = [points[0]];
+  for (let index = 1; index < points.length; index += 1) {
+    const current = points[index];
+    const lastKept = compacted[compacted.length - 1];
+    const distance = haversineDistanceMeters(lastKept, current);
+    if (distance >= minDistanceMeters) {
+      compacted.push(current);
+    }
+  }
+
+  const lastPoint = points[points.length - 1];
+  if (compacted[compacted.length - 1] !== lastPoint) {
+    compacted.push(lastPoint);
+  }
+
+  return compacted;
+}
+
 function renderTracker(trailPoints = []) {
   const visiblePoints = trailPoints.filter((event) => getGpsLat(event) !== null && getGpsLng(event) !== null);
   const trail = visiblePoints.slice(-1000);
   state.trail = trail;
   const groups = buildTrackerGroups(trail);
-  drawTrailMap(groups);
+  const compactGroups = groups.map((group) => ({
+    ...group,
+    points: compactTrackerPoints(group.points, 500)
+  }));
+  drawTrailMap(compactGroups);
 
   if (!elements.trailList) return;
 
