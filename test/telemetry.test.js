@@ -44,7 +44,10 @@ run('normaliza un evento gps valido', () => {
     lat: 41.3879,
     lon: 2.16992,
     speed: 12.5,
-    gpsTimestamp: '2026-06-25T11:06:08Z'
+    gpsTimestamp: '2026-06-25T11:06:08Z',
+    locationSource: 'gps',
+    locationProvider: 'SIM7600',
+    locationAccuracyMeters: 8.5
   });
 
   assert.equal(payload.signal, 'gps');
@@ -56,6 +59,37 @@ run('normaliza un evento gps valido', () => {
   assert.equal(payload.gps.longitude, 2.16992);
   assert.equal(payload.gpsRaw.lat, 41.3879);
   assert.equal(payload.gpsRaw.lon, 2.16992);
+  assert.equal(payload.locationSource, 'gps');
+  assert.equal(payload.locationProvider, 'SIM7600');
+  assert.equal(payload.locationAccuracyMeters, 8.5);
+  assert.equal(payload.gps.locationSource, 'gps');
+  assert.equal(payload.gps.locationProvider, 'SIM7600');
+  assert.equal(payload.gps.locationAccuracyMeters, 8.5);
+});
+
+run('normaliza un evento con ubicacion por red', () => {
+  const payload = normalizePayload({
+    eventId: 'evt-1-red',
+    truckId: 'LAB001',
+    event: 'bascula_subida',
+    lat: 40.4168,
+    lon: -3.7038,
+    speed: 0,
+    gpsTimestamp: '2026-06-25T11:06:08Z',
+    locationSource: 'red',
+    locationProvider: 'movistar.es',
+    locationAccuracyMeters: 1200
+  });
+
+  assert.equal(payload.signal, 'bascula_subida');
+  assert.equal(payload.kind, 'history_tracker');
+  assert.deepEqual(getTelemetryDestinations(payload), ['history', 'tracker']);
+  assert.equal(payload.locationSource, 'red');
+  assert.equal(payload.locationProvider, 'movistar.es');
+  assert.equal(payload.locationAccuracyMeters, 1200);
+  assert.equal(payload.gps.locationSource, 'red');
+  assert.equal(payload.gps.locationProvider, 'movistar.es');
+  assert.equal(payload.gps.locationAccuracyMeters, 1200);
 });
 
 run('normaliza un evento de bascula con gps para historico y tracker', () => {

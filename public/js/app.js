@@ -247,6 +247,16 @@ function signalLabel(signal) {
   return SIGNAL_LABELS[signal] || signal || '-';
 }
 
+function getLocationSource(event) {
+  const value = event?.locationSource ?? event?.gps?.locationSource;
+  const text = String(value || '').trim().toLowerCase();
+  return text === 'gps' || text === 'red' ? text : null;
+}
+
+function isHighPrecisionGps(event) {
+  return Number.isFinite(getGpsLat(event)) && Number.isFinite(getGpsLng(event)) && getLocationSource(event) !== 'red';
+}
+
 function getGpsLat(event) {
   const value = event?.gps?.latitude ?? event?.lat;
   const numeric = Number(value);
@@ -259,6 +269,23 @@ function getGpsLng(event) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function locationSourceLabel(event) {
+  const source = getLocationSource(event);
+  if (source === 'red') return 'Red';
+  if (source === 'gps') return 'GPS';
+  return '-';
+}
+
+function formatLocationAccuracy(event) {
+  const value = event?.locationAccuracyMeters ?? event?.gps?.locationAccuracyMeters;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return '';
+  }
+
+  return `+/-${numeric.toFixed(numeric < 10 ? 1 : 0)} m`;
+}
+
 function formatGps(event) {
   const lat = getGpsLat(event);
   const lng = getGpsLng(event);
@@ -268,10 +295,28 @@ function formatGps(event) {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
+function formatLocation(event) {
+  const coords = formatGps(event);
+  if (coords === 'Sin GPS') {
+    return coords;
+  }
+
+  const parts = [coords];
+  const source = locationSourceLabel(event);
+  if (source !== '-') {
+    parts.push(source);
+  }
+  const accuracy = formatLocationAccuracy(event);
+  if (accuracy) {
+    parts.push(accuracy);
+  }
+  return parts.join(' · ');
+}
+
 function formatCell(event, key) {
   if (key === 'receivedAt') return formatDate(event.receivedAt);
   if (key === 'signal') return signalLabel(event.signal);
-  if (key === 'coords') return formatGps(event);
+  if (key === 'coords') return formatLocation(event);
   if (key === 'gpioState') return String(event.gpioState ?? '-');
   if (key === 'reason') return event.reason || '-';
   return event[key] ?? '-';
@@ -349,7 +394,7 @@ function renderSummary() {
   elements.totalEvents.textContent = state.summary.totalEvents ?? 0;
   elements.deviceCount.textContent = state.summary.deviceCount ?? 0;
   elements.latestSignal.textContent = state.latestEvent ? signalLabel(state.latestEvent.signal) : '-';
-  elements.latestCoords.textContent = state.latestEvent ? formatGps(state.latestEvent) : '-';
+  elements.latestCoords.textContent = state.latestEvent ? formatLocation(state.latestEvent) : '-';
   ensureSelectedSensors();
   renderSensorSelector();
   renderSensorChips();
@@ -462,7 +507,7 @@ function renderSensorStack() {
       const signal = latest ? signalLabel(latest.signal) : 'Sin datos';
       const signalValue = latest?.signal || '-';
       const receivedAt = latest ? formatDate(latest.receivedAt) : '-';
-      const coords = latest ? formatGps(latest) : '-';
+      const coords = latest ? formatLocation(latest) : '-';
 
       return `
         <article class="sensor-card" style="--sensor-color: ${color}">
@@ -481,7 +526,7 @@ function renderSensorStack() {
           <div class="sensor-metrics">
             <div><span>Señal</span><strong>${escapeHtml(signalValue)}</strong></div>
             <div><span>Hora</span><strong>${escapeHtml(receivedAt)}</strong></div>
-            <div><span>GPS</span><strong>${escapeHtml(coords)}</strong></div>
+            <div><span>Ubicación</span><strong>${escapeHtml(coords)}</strong></div>
           </div>
         </article>
       `;
@@ -686,7 +731,7 @@ function filterEvents(events, filters) {
       const value = filter.value;
 
       if (filter.field === 'hasGps') {
-        const hasGps = Number.isFinite(event.gps?.latitude) && Number.isFinite(event.gps?.longitude);
+        const hasGps = isHighPrecisionGps(event);
         return filter.op === 'yes' ? hasGps : !hasGps;
       }
 
@@ -734,13 +779,13 @@ function filterEvents(events, filters) {
 
 function getEventFieldValue(event, field) {
   if (field === 'signal') return event.signal;
-  if (field === 'coords') return formatGps(event);
+  if (field === 'coords') return formatLocation(event);
   if (field === 'truckId') return event.truckId || event.deviceId;
   if (field === 'event') return event.event;
   if (field === 'reason') return event.reason;
   if (field === 'gpioState') return event.gpioState;
   if (field === 'receivedAt') return event.receivedAt;
-  if (field === 'hasGps') return Number.isFinite(event.gps?.latitude) && Number.isFinite(event.gps?.longitude);
+  if (field === 'hasGps') return isHighPrecisionGps(event);
   return event[field];
 }
 
@@ -1133,10 +1178,9 @@ function renderHistoryCell(event, key) {
     if (lat === null || lng === null) {
       return 'Sin GPS';
     }
-
     return `
       <div class="history-gps-cell">
-        <span>${escapeHtml(formatGps(event))}</span>
+        <span>${escapeHtml(formatLocation(event))}</span>
         <button
           type="button"
           class="gps-history-btn"
@@ -1146,6 +1190,8 @@ function renderHistoryCell(event, key) {
           data-signal="${escapeHtml(String(event.signal || ''))}"
           data-truck-id="${escapeHtml(String(event.truckId || event.deviceId || ''))}"
           data-reason="${escapeHtml(String(event.reason || ''))}"
+          data-location-source="${escapeHtml(String(event.locationSource || event.gps?.locationSource || ''))}"
+          data-location-accuracy="${escapeHtml(String(event.locationAccuracyMeters ?? event.gps?.locationAccuracyMeters ?? ''))}"
         >
           Ver mapa
         </button>
@@ -1225,7 +1271,7 @@ function renderTracker(trailPoints = []) {
           return `
             <article class="mini-item tracker-group" style="--tracker-color: ${color}">
               <strong>${escapeHtml(group.truckId)}</strong>
-              <div>${escapeHtml(formatGps(latest))}</div>
+              <div>${escapeHtml(formatLocation(latest))}</div>
               <small>${group.points.length} puntos · ${escapeHtml(latest?.signal ? signalLabel(latest.signal) : 'GPS')}</small>
               <div class="tracker-group-points">
                 ${recent
@@ -1302,9 +1348,10 @@ function drawTrailMap(groups) {
           : isLatest
             ? 'gps-truck-marker'
             : 'gps-point-marker';
+      const locationClass = getLocationSource(point) === 'red' ? ' gps-location-red' : '';
       const icon = L.divIcon({
         className: '',
-        html: `<span class="${iconClass}" style="--marker-color: ${color}"></span>`,
+        html: `<span class="${iconClass}${locationClass}" style="--marker-color: ${color}"></span>`,
         iconSize: isLift || isLower ? [24, 24] : isLatest ? [28, 28] : [12, 12],
         iconAnchor: isLift || isLower ? [12, 12] : isLatest ? [14, 14] : [6, 6]
       });
@@ -1313,7 +1360,7 @@ function drawTrailMap(groups) {
           <div class="gps-popup">
             <strong>${escapeHtml(group.truckId)}</strong>
             <div>${escapeHtml(formatDate(point.receivedAt))}</div>
-            <div>${escapeHtml(formatGps(point))}</div>
+            <div>${escapeHtml(formatLocation(point))}</div>
             <small>${escapeHtml(point.reason || signalLabel(point.signal))}</small>
           </div>
         `)
@@ -1347,7 +1394,7 @@ function openGpsPopup(point) {
     elements.gpsPopupTitle.textContent = point.truckId || point.deviceId || 'Punto GPS';
   }
   if (elements.gpsPopupMeta) {
-    elements.gpsPopupMeta.textContent = `${formatDate(point.receivedAt)} · ${formatGps(point)} · ${signalLabel(point.signal)}`;
+    elements.gpsPopupMeta.textContent = `${formatDate(point.receivedAt)} · ${formatLocation(point)} · ${signalLabel(point.signal)}`;
   }
 
   if (!window.L) {
@@ -1512,9 +1559,13 @@ function setupListeners() {
       receivedAt: button.dataset.receivedAt || '',
       signal: button.dataset.signal || 'gps',
       reason: button.dataset.reason || '',
+      locationSource: button.dataset.locationSource || null,
+      locationAccuracyMeters: button.dataset.locationAccuracy ? Number(button.dataset.locationAccuracy) : null,
       gps: {
         latitude: Number(button.dataset.lat),
-        longitude: Number(button.dataset.lng)
+        longitude: Number(button.dataset.lng),
+        locationSource: button.dataset.locationSource || null,
+        locationAccuracyMeters: button.dataset.locationAccuracy ? Number(button.dataset.locationAccuracy) : null
       }
     });
   });

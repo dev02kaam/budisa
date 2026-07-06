@@ -25,7 +25,20 @@ const DeviceSchema = new mongoose.Schema(
       longitude: Number,
       altitude: Number,
       speed: Number,
-      heading: Number
+      heading: Number,
+      locationSource: {
+        type: String,
+        enum: ['gps', 'red'],
+        default: null
+      },
+      locationProvider: {
+        type: String,
+        default: null
+      },
+      locationAccuracyMeters: {
+        type: Number,
+        default: null
+      }
     },
     status: {
       type: String,

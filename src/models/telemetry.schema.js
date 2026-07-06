@@ -73,6 +73,19 @@ function createTelemetrySchema() {
         type: String,
         default: null
       },
+      locationSource: {
+        type: String,
+        enum: ['gps', 'red'],
+        default: null
+      },
+      locationProvider: {
+        type: String,
+        default: null
+      },
+      locationAccuracyMeters: {
+        type: Number,
+        default: null
+      },
       gps: {
         latitude: {
           type: Number,
@@ -96,6 +109,19 @@ function createTelemetrySchema() {
         },
         timestamp: {
           type: String,
+          default: null
+        },
+        locationSource: {
+          type: String,
+          enum: ['gps', 'red'],
+          default: null
+        },
+        locationProvider: {
+          type: String,
+          default: null
+        },
+        locationAccuracyMeters: {
+          type: Number,
           default: null
         }
       },

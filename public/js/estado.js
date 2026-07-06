@@ -102,19 +102,76 @@ function signalLabel(signal) {
   return SIGNAL_LABELS[signal] || signal || '-';
 }
 
+function getLocationSource(event) {
+  const value = event?.locationSource ?? event?.gps?.locationSource;
+  const text = String(value || '').trim().toLowerCase();
+  return text === 'gps' || text === 'red' ? text : null;
+}
+
+function isHighPrecisionGps(event) {
+  return Number.isFinite(getGpsLat(event)) && Number.isFinite(getGpsLng(event)) && getLocationSource(event) !== 'red';
+}
+
+function locationSourceLabel(event) {
+  const source = getLocationSource(event);
+  if (source === 'red') return 'Red';
+  if (source === 'gps') return 'GPS';
+  return '-';
+}
+
+function formatLocationAccuracy(event) {
+  const value = event?.locationAccuracyMeters ?? event?.gps?.locationAccuracyMeters;
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return '';
+  }
+
+  return `±${numeric.toFixed(numeric < 10 ? 1 : 0)} m`;
+}
+
+function getGpsLat(event) {
+  const value = event.gps?.latitude ?? event.lat;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function getGpsLng(event) {
+  const value = event.gps?.longitude ?? event.lon;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function formatGps(event) {
-  const lat = event.gps?.latitude ?? event.lat;
-  const lng = event.gps?.longitude ?? event.lon;
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+  const lat = getGpsLat(event);
+  const lng = getGpsLng(event);
+  if (lat === null || lng === null) {
     return 'Sin GPS';
   }
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
+function formatLocation(event) {
+  const coords = formatGps(event);
+  if (coords === 'Sin GPS') {
+    return coords;
+  }
+
+  const parts = [coords];
+  const source = locationSourceLabel(event);
+  if (source !== '-') {
+    parts.push(source);
+  }
+  const accuracy = formatLocationAccuracy(event);
+  if (accuracy) {
+    parts.push(accuracy);
+  }
+  return parts.join(' · ');
+}
+
 function formatCell(event, key) {
   if (key === 'receivedAt') return formatDate(event.receivedAt);
   if (key === 'signal') return signalLabel(event.signal);
-  if (key === 'coords') return formatGps(event);
+  if (key === 'coords') return formatLocation(event);
   if (key === 'gpioState') return String(event.gpioState ?? '-');
   if (key === 'reason') return event.reason || '-';
   return event[key] ?? '-';
@@ -128,7 +185,7 @@ function getEventFieldValue(event, field) {
   if (field === 'reason') return event.reason;
   if (field === 'gpioState') return event.gpioState;
   if (field === 'receivedAt') return event.receivedAt;
-  if (field === 'hasGps') return Number.isFinite(event.gps?.latitude) && Number.isFinite(event.gps?.longitude);
+  if (field === 'hasGps') return isHighPrecisionGps(event);
   return event[field];
 }
 
@@ -190,7 +247,7 @@ function filterEvents(events, filters) {
       const value = filter.value;
 
       if (filter.field === 'hasGps') {
-        const hasGps = Number.isFinite(event.gps?.latitude) && Number.isFinite(event.gps?.longitude);
+        const hasGps = isHighPrecisionGps(event);
         return filter.op === 'yes' ? hasGps : !hasGps;
       }
 

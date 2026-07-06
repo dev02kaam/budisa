@@ -8,6 +8,8 @@ const allowedSignals = new Set([
   'control_heartbeat'
 ]);
 
+const allowedLocationSources = new Set(['gps', 'red']);
+
 function toNullableNumber(value) {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -15,6 +17,29 @@ function toNullableNumber(value) {
 
   const numericValue = Number(value);
   return Number.isNaN(numericValue) ? null : numericValue;
+}
+
+function toNullableString(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const text = String(value).trim();
+  return text ? text : null;
+}
+
+function normalizeLocationSource(value) {
+  const text = toNullableString(value);
+  if (!text) {
+    return null;
+  }
+
+  const normalized = text.toLowerCase();
+  if (!allowedLocationSources.has(normalized)) {
+    throw new Error('locationSource invalido');
+  }
+
+  return normalized;
 }
 
 function normalizePayload(body = {}) {
@@ -26,6 +51,15 @@ function normalizePayload(body = {}) {
   const altitude = body.altitude ?? body.gps?.altitude ?? null;
   const speed = body.speed ?? body.gps?.speed ?? null;
   const heading = body.heading ?? body.gps?.heading ?? null;
+  const locationSource = normalizeLocationSource(
+    body.locationSource ?? body.location_source ?? body.gps?.locationSource ?? body.gps?.location_source
+  );
+  const locationProvider = toNullableString(
+    body.locationProvider ?? body.location_provider ?? body.gps?.locationProvider ?? body.gps?.location_provider
+  );
+  const locationAccuracyMeters = toNullableNumber(
+    body.locationAccuracyMeters ?? body.location_accuracy_meters ?? body.gps?.locationAccuracyMeters ?? body.gps?.location_accuracy_meters
+  );
   const eventId = String(body.eventId || body.event_id || body.idempotencyKey || '').trim();
   const eventName = String(body.event || body.signal || body.estado || signal).trim();
   const isControlHeartbeat = signal === 'control_heartbeat';
@@ -71,14 +105,23 @@ function normalizePayload(body = {}) {
       altitude: toNullableNumber(altitude),
       speed: toNullableNumber(speed),
       heading: toNullableNumber(heading),
-      timestamp: body.gpsTimestamp ?? body.gps_timestamp ?? body.gps?.timestamp ?? null
+      timestamp: body.gpsTimestamp ?? body.gps_timestamp ?? body.gps?.timestamp ?? null,
+      locationSource,
+      locationProvider,
+      locationAccuracyMeters
     },
     gpsRaw: {
       lat: latitudeRaw ?? null,
       lon: longitudeRaw ?? null,
       speed: body.speed ?? body.gps?.speed ?? null,
-      gpsTimestamp: body.gpsTimestamp ?? body.gps_timestamp ?? body.gps?.timestamp ?? null
+      gpsTimestamp: body.gpsTimestamp ?? body.gps_timestamp ?? body.gps?.timestamp ?? null,
+      locationSource,
+      locationProvider,
+      locationAccuracyMeters
     },
+    locationSource,
+    locationProvider,
+    locationAccuracyMeters,
     source: body.source || 'raspberry',
     metadata: body.metadata || {},
     kind: isControlHeartbeat ? 'state' : isGpsOnly ? 'tracker' : hasGps ? 'history_tracker' : 'history'
@@ -105,5 +148,6 @@ module.exports = {
   allowedSignals,
   normalizePayload,
   toNullableNumber,
+  toNullableString,
   getTelemetryDestinations
 };

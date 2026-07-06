@@ -10,6 +10,7 @@ Plataforma modular en Node.js, HTML, CSS y JavaScript puro para recibir telemetr
 - Columnas reordenables por drag and drop
 - Columnas visibles/ocultas con botones `x` y `+`
 - Tracker GPS con mini historial de posiciones
+- Etiqueta de fuente de ubicación para GPS o red cuando el dato la incluye
 - Selector de modo día/noche
 
 ## Estructura
@@ -48,7 +49,10 @@ Plataforma modular en Node.js, HTML, CSS y JavaScript puro para recibir telemetr
   "lat": null,
   "lon": null,
   "speed": null,
-  "gpsTimestamp": null
+  "gpsTimestamp": null,
+  "locationSource": "gps",
+  "locationProvider": "SIM7600",
+  "locationAccuracyMeters": 18.4
 }
 ```
 
@@ -65,6 +69,7 @@ La app Python de `sensorseñal` manda eventos con esta forma:
 - `reason`
 - `thresholdSeconds`
 - `lat`, `lon`, `speed`, `gpsTimestamp` opcionales
+- `locationSource`, `locationProvider`, `locationAccuracyMeters` opcionales
 
 La API de Budisa acepta ese formato directamente y también sigue aceptando una versión simplificada con `deviceId` y `signal`.
 

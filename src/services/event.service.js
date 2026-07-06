@@ -9,18 +9,25 @@ function buildCommonDoc(payload, category) {
   return {
     ...payload,
     category,
-    gps: payload.gps || {
+    gps: {
       latitude: rawGps.lat ?? payload.lat ?? null,
       longitude: rawGps.lon ?? payload.lon ?? null,
-      altitude: null,
+      altitude: payload.gps?.altitude ?? null,
       speed: rawGps.speed ?? payload.speed ?? null,
-      heading: null,
-      timestamp: rawGps.gpsTimestamp ?? payload.gpsTimestamp ?? null
+      heading: payload.gps?.heading ?? null,
+      timestamp: rawGps.gpsTimestamp ?? payload.gpsTimestamp ?? null,
+      locationSource: rawGps.locationSource ?? payload.locationSource ?? null,
+      locationProvider: rawGps.locationProvider ?? payload.locationProvider ?? null,
+      locationAccuracyMeters: rawGps.locationAccuracyMeters ?? payload.locationAccuracyMeters ?? null
     },
     lat: rawGps.lat ?? payload.lat ?? payload.gps?.latitude ?? null,
     lon: rawGps.lon ?? payload.lon ?? payload.gps?.longitude ?? null,
     speed: rawGps.speed ?? payload.speed ?? payload.gps?.speed ?? null,
-    gpsTimestamp: rawGps.gpsTimestamp ?? payload.gpsTimestamp ?? payload.gps?.timestamp ?? null
+    gpsTimestamp: rawGps.gpsTimestamp ?? payload.gpsTimestamp ?? payload.gps?.timestamp ?? null,
+    locationSource: rawGps.locationSource ?? payload.locationSource ?? payload.gps?.locationSource ?? null,
+    locationProvider: rawGps.locationProvider ?? payload.locationProvider ?? payload.gps?.locationProvider ?? null,
+    locationAccuracyMeters:
+      rawGps.locationAccuracyMeters ?? payload.locationAccuracyMeters ?? payload.gps?.locationAccuracyMeters ?? null
   };
 }
 
@@ -96,6 +103,7 @@ async function getEvents(filters = {}, limit = 200) {
   if (filters.hasGps === true) {
     query['gps.latitude'] = { $ne: null };
     query['gps.longitude'] = { $ne: null };
+    query.locationSource = { $ne: 'red' };
   }
 
   if (filters.from || filters.to) {

@@ -1066,6 +1066,29 @@ body[data-theme="day"] .filter-row select option {
   gap: 8px;
 }
 
+.history-gps-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.tracker-group-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.tracker-accuracy {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .gps-history-btn {
   align-self: flex-start;
   padding: 7px 11px;
@@ -1157,6 +1180,11 @@ body[data-theme="day"] .filter-row select option {
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
 }
 
+.gps-point-marker.gps-location-red {
+  background: #f6c177;
+  box-shadow: 0 0 0 6px color-mix(in srgb, #f6c177 18%, transparent), 0 6px 14px rgba(0, 0, 0, 0.28);
+}
+
 .gps-truck-marker {
   display: grid;
   width: 28px;
@@ -1176,6 +1204,11 @@ body[data-theme="day"] .filter-row select option {
   content: '';
 }
 
+.gps-truck-marker.gps-location-red {
+  background: #f6c177;
+  box-shadow: 0 0 0 8px color-mix(in srgb, #f6c177 22%, transparent), 0 14px 30px rgba(0, 0, 0, 0.35);
+}
+
 .gps-event-marker {
   display: grid;
   width: 24px;
@@ -1193,6 +1226,10 @@ body[data-theme="day"] .filter-row select option {
   border-radius: 999px;
   background: #09111d;
   content: '';
+}
+
+.gps-event-marker.gps-location-red {
+  background: #f6c177;
 }
 
 .gps-event-marker-up {
