@@ -121,6 +121,9 @@ function locationSourceLabel(event) {
 
 function formatLocationAccuracy(event) {
   const value = event?.locationAccuracyMeters ?? event?.gps?.locationAccuracyMeters;
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
     return '';
@@ -129,14 +132,34 @@ function formatLocationAccuracy(event) {
   return `±${numeric.toFixed(numeric < 10 ? 1 : 0)} m`;
 }
 
+function formatLocationAccuracy(event) {
+  const value = event?.locationAccuracyMeters ?? event?.gps?.locationAccuracyMeters;
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return '';
+  }
+
+  return `+/-${numeric.toFixed(numeric < 10 ? 1 : 0)} m`;
+}
+
 function getGpsLat(event) {
   const value = event.gps?.latitude ?? event.lat;
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }
 
 function getGpsLng(event) {
   const value = event.gps?.longitude ?? event.lon;
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }
@@ -166,6 +189,65 @@ function formatLocation(event) {
     parts.push(accuracy);
   }
   return parts.join(' · ');
+}
+
+function buildTrackerLookup(points = []) {
+  const lookup = new Map();
+
+  points.forEach((point) => {
+    const key = String(point.deviceId || point.truckId || '').trim();
+    if (!key) return;
+
+    const current = lookup.get(key);
+    if (!current || new Date(point.receivedAt) > new Date(current.receivedAt)) {
+      lookup.set(key, point);
+    }
+  });
+
+  return lookup;
+}
+
+function mergeTrackerLocation(event, trackerLookup) {
+  const lat = getGpsLat(event);
+  const lng = getGpsLng(event);
+  if (lat !== null && lng !== null) {
+    return event;
+  }
+
+  const key = String(event.deviceId || event.truckId || '').trim();
+  const trackerPoint = trackerLookup.get(key);
+  if (!trackerPoint) {
+    return event;
+  }
+
+  const trackerLat = getGpsLat(trackerPoint);
+  const trackerLng = getGpsLng(trackerPoint);
+  if (trackerLat === null || trackerLng === null) {
+    return event;
+  }
+
+  return {
+    ...event,
+    lat: trackerPoint.lat ?? trackerLat,
+    lon: trackerPoint.lon ?? trackerLng,
+    gps: {
+      ...(event.gps || {}),
+      latitude: trackerLat,
+      longitude: trackerLng,
+      altitude: event.gps?.altitude ?? trackerPoint.gps?.altitude ?? null,
+      speed: event.gps?.speed ?? trackerPoint.gps?.speed ?? null,
+      heading: event.gps?.heading ?? trackerPoint.gps?.heading ?? null,
+      timestamp: event.gps?.timestamp ?? trackerPoint.gps?.timestamp ?? null,
+      locationSource: event.locationSource ?? trackerPoint.locationSource ?? trackerPoint.gps?.locationSource ?? null,
+      locationProvider: event.locationProvider ?? trackerPoint.locationProvider ?? trackerPoint.gps?.locationProvider ?? null,
+      locationAccuracyMeters:
+        event.locationAccuracyMeters ?? trackerPoint.locationAccuracyMeters ?? trackerPoint.gps?.locationAccuracyMeters ?? null
+    },
+    locationSource: event.locationSource ?? trackerPoint.locationSource ?? trackerPoint.gps?.locationSource ?? null,
+    locationProvider: event.locationProvider ?? trackerPoint.locationProvider ?? trackerPoint.gps?.locationProvider ?? null,
+    locationAccuracyMeters:
+      event.locationAccuracyMeters ?? trackerPoint.locationAccuracyMeters ?? trackerPoint.gps?.locationAccuracyMeters ?? null
+  };
 }
 
 function formatCell(event, key) {
@@ -497,7 +579,12 @@ function exportCsv() {
 
 async function refresh() {
   try {
-    state.events = await requestJson('/api/heartbeats?limit=1000');
+    const [heartbeats, trackerPoints] = await Promise.all([
+      requestJson('/api/heartbeats?limit=1000'),
+      requestJson('/api/tracker?limit=5000').catch(() => [])
+    ]);
+    const trackerLookup = buildTrackerLookup(trackerPoints || []);
+    state.events = (heartbeats || []).map((event) => mergeTrackerLocation(event, trackerLookup));
     applyFilters();
   } catch (error) {
     console.error(error);

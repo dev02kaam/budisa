@@ -259,12 +259,18 @@ function isHighPrecisionGps(event) {
 
 function getGpsLat(event) {
   const value = event?.gps?.latitude ?? event?.lat;
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }
 
 function getGpsLng(event) {
   const value = event?.gps?.longitude ?? event?.lon;
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }
@@ -278,6 +284,9 @@ function locationSourceLabel(event) {
 
 function formatLocationAccuracy(event) {
   const value = event?.locationAccuracyMeters ?? event?.gps?.locationAccuracyMeters;
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
     return '';
