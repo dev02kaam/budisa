@@ -32,9 +32,12 @@ const SIGNAL_LABELS = {
   control_heartbeat: 'Heartbeat de servicio'
 };
 
+const PAGE_SIZE = 15;
+
 const state = {
   events: [],
   filteredEvents: [],
+  page: 1,
   filters: loadFilters()
 };
 
@@ -47,7 +50,10 @@ const elements = {
   exportCsvBtn: document.getElementById('heartbeatExportCsvBtn'),
   head: document.getElementById('heartbeatHead'),
   table: document.getElementById('heartbeatEventsTable'),
-  count: document.getElementById('heartbeatCount')
+  count: document.getElementById('heartbeatCount'),
+  prevPage: document.getElementById('heartbeatPrevPage'),
+  nextPage: document.getElementById('heartbeatNextPage'),
+  pageInfo: document.getElementById('heartbeatPageInfo')
 };
 
 function loadFilters() {
@@ -397,6 +403,37 @@ function buildFilterValueControl(filter, inputType) {
   return `<input data-role="value" type="${inputType}" value="${escapeHtml(filter.value ?? '')}" placeholder="${placeholder}" />`;
 }
 
+function getPageSlice(items, page, pageSize) {
+  const totalItems = Array.isArray(items) ? items.length : 0;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(Math.max(1, page || 1), totalPages);
+  const start = (safePage - 1) * pageSize;
+  return {
+    page: safePage,
+    totalPages,
+    totalItems,
+    start,
+    end: Math.min(start + pageSize, totalItems),
+    items: (items || []).slice(start, start + pageSize)
+  };
+}
+
+function updatePagination() {
+  const { page, totalPages, totalItems, start, end } = getPageSlice(state.filteredEvents, state.page, PAGE_SIZE);
+  state.page = page;
+  if (elements.pageInfo) {
+    elements.pageInfo.textContent = totalItems
+      ? `Página ${page} de ${totalPages} · ${start + 1}-${end} de ${totalItems}`
+      : 'Sin eventos';
+  }
+  if (elements.prevPage) {
+    elements.prevPage.disabled = page <= 1 || totalItems === 0;
+  }
+  if (elements.nextPage) {
+    elements.nextPage.disabled = page >= totalPages || totalItems === 0;
+  }
+}
+
 function addFilterRow(filter = { id: crypto.randomUUID(), field: 'signal', op: 'contains', value: '' }) {
   state.filters.push(filter);
   saveFilters();
@@ -511,6 +548,7 @@ function renderTable() {
   if (!visibleColumns.length) {
     elements.table.innerHTML = `<tr><td colspan="${Math.max(COLUMN_DEFS.length, 1)}" class="muted">No hay columnas visibles.</td></tr>`;
     elements.count.textContent = `${state.filteredEvents.length} heartbeats visibles`;
+    updatePagination();
     return;
   }
 
@@ -521,7 +559,8 @@ function renderTable() {
     })
     .join('')}</tr>`;
 
-  elements.table.innerHTML = state.filteredEvents
+  const page = getPageSlice(state.filteredEvents, state.page, PAGE_SIZE);
+  elements.table.innerHTML = page.items
     .map((event) => {
       const cells = visibleColumns.map((key) => `<td>${escapeHtml(String(formatCell(event, key)))}</td>`).join('');
       return `<tr>${cells}</tr>`;
@@ -529,6 +568,7 @@ function renderTable() {
     .join('');
 
   elements.count.textContent = `${state.filteredEvents.length} heartbeats visibles`;
+  updatePagination();
 }
 
 function applyFilters() {
@@ -538,6 +578,7 @@ function applyFilters() {
   });
 
   state.filteredEvents = filterEvents(state.events, completeFilters);
+  state.page = 1;
   renderTable();
 }
 
@@ -603,6 +644,15 @@ function setupListeners() {
     window.location.reload();
   });
   elements.exportCsvBtn?.addEventListener('click', exportCsv);
+  elements.prevPage?.addEventListener('click', () => {
+    state.page = Math.max(1, state.page - 1);
+    renderTable();
+  });
+  elements.nextPage?.addEventListener('click', () => {
+    const { totalPages } = getPageSlice(state.filteredEvents, state.page, PAGE_SIZE);
+    state.page = Math.min(totalPages, state.page + 1);
+    renderTable();
+  });
 }
 
 function boot() {

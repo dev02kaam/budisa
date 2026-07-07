@@ -1103,6 +1103,20 @@ body[data-theme="day"] .filter-row select option {
   overflow: auto;
 }
 
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 6px;
+  color: var(--muted);
+}
+
+.table-pagination span {
+  font-size: 0.92rem;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -1249,6 +1263,47 @@ body[data-theme="day"] .filter-row select option {
   gap: 4px;
   margin-top: 6px;
   font-size: 0.84rem;
+}
+
+.tracker-timeline {
+  gap: 8px;
+}
+
+.tracker-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tracker-step-icon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--tracker-color, var(--accent)) 24%, transparent);
+  color: var(--text);
+}
+
+.tracker-step small {
+  grid-column: 2;
+  color: var(--muted);
+}
+
+.tracker-step-up .tracker-step-icon {
+  background: rgba(97, 216, 185, 0.18);
+}
+
+.tracker-step-down .tracker-step-icon {
+  background: rgba(255, 108, 122, 0.18);
 }
 
 .gps-popup-dialog {

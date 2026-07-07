@@ -12,6 +12,7 @@
 const SENSOR_COLORS = ['#6ea8ff', '#61d8b9', '#f6c177', '#b57bff', '#ff6c7a', '#8bd3ff'];
 const SIGNAL_KEYS = ['bascula_subida', 'bascula_bajada', 'bascula_levantada', 'estado_estable', 'alerta'];
 const SIGNAL_BAR_COLORS = ['#61d8b9', '#6ea8ff', '#f6c177', '#b57bff', '#ff6c7a'];
+const PAGE_SIZE = 15;
 
 const COLUMN_DEFS = [
   { key: 'receivedAt', label: 'Fecha' },
@@ -53,8 +54,11 @@ const state = {
   historyEvents: [],
   heartbeatEvents: [],
   filteredEvents: [],
+  historyPage: 1,
+  heartbeatPage: 1,
   latestEvent: null,
   trail: [],
+  trailGroups: [],
   devices: [],
   filters: loadFilters(),
   columns: loadColumns(),
@@ -107,6 +111,9 @@ const elements = {
   historyHead: document.getElementById('historyHead'),
   eventsTable: document.getElementById('eventsTable'),
   historyCount: document.getElementById('historyCount'),
+  historyPrevPage: document.getElementById('historyPrevPage'),
+  historyNextPage: document.getElementById('historyNextPage'),
+  historyPageInfo: document.getElementById('historyPageInfo'),
   trackerDateInput: document.getElementById('trackerDateInput'),
   trackerTodayBtn: document.getElementById('trackerTodayBtn'),
   gpsMap: document.getElementById('gpsMap'),
@@ -389,8 +396,8 @@ function setView(view) {
   if (view === 'tracker') {
     window.setTimeout(() => {
       state.gpsMapInstance?.invalidateSize();
-      if (state.trail.length) {
-        drawTrailMap(state.trail);
+      if (state.trailGroups.length) {
+        drawTrailMap(state.trailGroups);
       }
     }, 0);
     syncTrackerDateControls();
@@ -1211,15 +1218,48 @@ function renderHistoryCell(event, key) {
   return escapeHtml(String(formatCell(event, key)));
 }
 
+function getPageSlice(items, page, pageSize) {
+  const totalItems = Array.isArray(items) ? items.length : 0;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(Math.max(1, page || 1), totalPages);
+  const start = (safePage - 1) * pageSize;
+  return {
+    page: safePage,
+    totalPages,
+    totalItems,
+    start,
+    end: Math.min(start + pageSize, totalItems),
+    items: (items || []).slice(start, start + pageSize)
+  };
+}
+
+function updateHistoryPagination() {
+  const { page, totalPages, totalItems, start, end } = getPageSlice(state.filteredEvents, state.historyPage, PAGE_SIZE);
+  state.historyPage = page;
+  if (elements.historyPageInfo) {
+    elements.historyPageInfo.textContent = totalItems
+      ? `Página ${page} de ${totalPages} · ${start + 1}-${end} de ${totalItems}`
+      : 'Sin eventos';
+  }
+  if (elements.historyPrevPage) {
+    elements.historyPrevPage.disabled = page <= 1 || totalItems === 0;
+  }
+  if (elements.historyNextPage) {
+    elements.historyNextPage.disabled = page >= totalPages || totalItems === 0;
+  }
+}
+
 function renderHistory() {
   const visibleColumns = getVisibleColumns();
   if (!visibleColumns.length) {
     elements.eventsTable.innerHTML = `<tr><td colspan="${Math.max(COLUMN_DEFS.length, 1)}" class="muted">No hay columnas visibles.</td></tr>`;
     elements.historyCount.textContent = `${state.filteredEvents.length} eventos visibles`;
+    updateHistoryPagination();
     return;
   }
 
-  elements.eventsTable.innerHTML = state.filteredEvents
+  const page = getPageSlice(state.filteredEvents, state.historyPage, PAGE_SIZE);
+  elements.eventsTable.innerHTML = page.items
     .map((event) => {
       const cells = visibleColumns
         .map((key) => `<td>${renderHistoryCell(event, key)}</td>`)
@@ -1229,6 +1269,7 @@ function renderHistory() {
     .join('');
 
   elements.historyCount.textContent = `${state.filteredEvents.length} eventos visibles`;
+  updateHistoryPagination();
 }
 
 function applyCurrentFilters() {
@@ -1238,6 +1279,7 @@ function applyCurrentFilters() {
   });
 
   state.filteredEvents = filterEvents(state.historyEvents, completeFilters);
+  state.historyPage = 1;
   renderHistory();
 }
 
@@ -1289,8 +1331,9 @@ function compactTrackerPoints(points, minDistanceMeters = 500) {
   for (let index = 1; index < points.length; index += 1) {
     const current = points[index];
     const lastKept = compacted[compacted.length - 1];
+    const isBascula = current.signal === 'bascula_subida' || current.signal === 'bascula_bajada';
     const distance = haversineDistanceMeters(lastKept, current);
-    if (distance >= minDistanceMeters) {
+    if (isBascula || distance >= minDistanceMeters) {
       compacted.push(current);
     }
   }
@@ -1306,37 +1349,51 @@ function compactTrackerPoints(points, minDistanceMeters = 500) {
 function renderTracker(trailPoints = []) {
   const visiblePoints = trailPoints.filter((event) => getGpsLat(event) !== null && getGpsLng(event) !== null);
   const trail = visiblePoints.slice(-1000);
-  state.trail = trail;
   const groups = buildTrackerGroups(trail);
   const compactGroups = groups.map((group) => ({
     ...group,
     points: compactTrackerPoints(group.points, 500)
   }));
+  state.trailGroups = compactGroups;
+  state.trail = compactGroups.flatMap((group) => group.points);
   drawTrailMap(compactGroups);
 
   if (!elements.trailList) return;
 
-  elements.trailList.innerHTML = groups.length
-    ? groups
+  elements.trailList.innerHTML = compactGroups.length
+    ? compactGroups
         .slice()
         .reverse()
         .map((group, index) => {
           const latest = group.points[group.points.length - 1];
-          const recent = group.points.slice(-3).reverse();
           const color = getTrackerPointColor(index);
+          const timeline = group.points
+            .map((point) => {
+              const isUp = point.signal === 'bascula_subida';
+              const isDown = point.signal === 'bascula_bajada';
+              const stepClass = isUp
+                ? 'tracker-step tracker-step-up'
+                : isDown
+                  ? 'tracker-step tracker-step-down'
+                  : 'tracker-step tracker-step-dot';
+              const stepLabel = isUp ? 'Subida' : isDown ? 'Bajada' : 'Ruta';
+              return `
+                <span class="${stepClass}">
+                  <span class="tracker-step-icon">${isUp ? '▲' : isDown ? '▼' : '•'}</span>
+                  <span class="tracker-step-text">${escapeHtml(stepLabel)}</span>
+                  <small>${escapeHtml(formatDate(point.receivedAt))}</small>
+                  <small>${escapeHtml(formatLocation(point))}</small>
+                </span>
+              `;
+            })
+            .join('');
           return `
             <article class="mini-item tracker-group" style="--tracker-color: ${color}">
               <strong>${escapeHtml(group.truckId)}</strong>
               <div>${escapeHtml(formatLocation(latest))}</div>
-              <small>${group.points.length} puntos · ${escapeHtml(latest?.signal ? signalLabel(latest.signal) : 'GPS')}</small>
-              <div class="tracker-group-points">
-                ${recent
-                  .map(
-                    (event) => `
-                      <span>${escapeHtml(formatDate(event.receivedAt))} · ${escapeHtml(signalLabel(event.signal))}</span>
-                    `
-                  )
-                  .join('')}
+              <small>${group.points.length} puntos visibles · ${escapeHtml(latest?.signal ? signalLabel(latest.signal) : 'GPS')}</small>
+              <div class="tracker-group-points tracker-timeline">
+                ${timeline}
               </div>
             </article>
           `;
@@ -1606,6 +1663,15 @@ function setupListeners() {
     renderTableColumns();
   });
   elements.exportCsvBtn.addEventListener('click', exportCsv);
+  elements.historyPrevPage?.addEventListener('click', () => {
+    state.historyPage = Math.max(1, state.historyPage - 1);
+    renderHistory();
+  });
+  elements.historyNextPage?.addEventListener('click', () => {
+    const { totalPages } = getPageSlice(state.filteredEvents, state.historyPage, PAGE_SIZE);
+    state.historyPage = Math.min(totalPages, state.historyPage + 1);
+    renderHistory();
+  });
   elements.eventsTable?.addEventListener('click', (event) => {
     const button = event.target.closest?.('.gps-history-btn');
     if (!button) return;
@@ -1697,7 +1763,7 @@ function setupListeners() {
     }
     if (state.trail.length) {
       state.gpsMapInstance?.invalidateSize();
-      drawTrailMap(state.trail);
+      drawTrailMap(state.trailGroups.length ? state.trailGroups : state.trail);
     }
     if (elements.gpsPopupDialog?.open) {
       state.gpsPopupMapInstance?.invalidateSize();
