@@ -67,6 +67,7 @@ const state = {
   trackerFollowToday: loadTrackerFollowToday(),
   trackerDeviceId: 'raspberry-1',
   gpsMapInstance: null,
+  gpsHomeBounds: null,
   gpsPolyline: null,
   gpsMarkers: [],
   trackerLayers: [],
@@ -116,6 +117,7 @@ const elements = {
   historyPageInfo: document.getElementById('historyPageInfo'),
   trackerDateInput: document.getElementById('trackerDateInput'),
   trackerTodayBtn: document.getElementById('trackerTodayBtn'),
+  trackerHomeBtn: document.getElementById('trackerHomeBtn'),
   gpsMap: document.getElementById('gpsMap'),
   trailCount: document.getElementById('trailCount'),
   boundsInfo: document.getElementById('boundsInfo'),
@@ -327,6 +329,90 @@ function formatLocation(event) {
     parts.push(accuracy);
   }
   return parts.join(' · ');
+}
+
+function buildTrackerLookup(points = []) {
+  const lookup = new Map();
+
+  points.forEach((point) => {
+    const key = String(point.deviceId || point.truckId || '').trim();
+    if (!key) return;
+
+    const list = lookup.get(key) || [];
+    list.push(point);
+    lookup.set(key, list);
+  });
+
+  lookup.forEach((list) => {
+    list.sort((left, right) => new Date(left.receivedAt) - new Date(right.receivedAt));
+  });
+
+  return lookup;
+}
+
+function findTrackerPointForEvent(event, trackerLookup) {
+  const key = String(event.deviceId || event.truckId || '').trim();
+  const candidates = trackerLookup.get(key);
+  if (!candidates || !candidates.length) {
+    return null;
+  }
+
+  const eventTime = new Date(event.receivedAt).getTime();
+  if (Number.isNaN(eventTime)) {
+    return candidates[candidates.length - 1];
+  }
+
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const candidate = candidates[index];
+    const candidateTime = new Date(candidate.receivedAt).getTime();
+    if (!Number.isNaN(candidateTime) && candidateTime <= eventTime) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
+}
+
+function mergeTrackerLocation(event, trackerLookup) {
+  const lat = getGpsLat(event);
+  const lng = getGpsLng(event);
+  if (lat !== null && lng !== null) {
+    return event;
+  }
+
+  const trackerPoint = findTrackerPointForEvent(event, trackerLookup);
+  if (!trackerPoint) {
+    return event;
+  }
+
+  const trackerLat = getGpsLat(trackerPoint);
+  const trackerLng = getGpsLng(trackerPoint);
+  if (trackerLat === null || trackerLng === null) {
+    return event;
+  }
+
+  return {
+    ...event,
+    lat: trackerPoint.lat ?? trackerLat,
+    lon: trackerPoint.lon ?? trackerLng,
+    gps: {
+      ...(event.gps || {}),
+      latitude: trackerLat,
+      longitude: trackerLng,
+      altitude: event.gps?.altitude ?? trackerPoint.gps?.altitude ?? null,
+      speed: event.gps?.speed ?? trackerPoint.gps?.speed ?? null,
+      heading: event.gps?.heading ?? trackerPoint.gps?.heading ?? null,
+      timestamp: event.gps?.timestamp ?? trackerPoint.gps?.timestamp ?? null,
+      locationSource: event.locationSource ?? trackerPoint.locationSource ?? trackerPoint.gps?.locationSource ?? null,
+      locationProvider: event.locationProvider ?? trackerPoint.locationProvider ?? trackerPoint.gps?.locationProvider ?? null,
+      locationAccuracyMeters:
+        event.locationAccuracyMeters ?? trackerPoint.locationAccuracyMeters ?? trackerPoint.gps?.locationAccuracyMeters ?? null
+    },
+    locationSource: event.locationSource ?? trackerPoint.locationSource ?? trackerPoint.gps?.locationSource ?? null,
+    locationProvider: event.locationProvider ?? trackerPoint.locationProvider ?? trackerPoint.gps?.locationProvider ?? null,
+    locationAccuracyMeters:
+      event.locationAccuracyMeters ?? trackerPoint.locationAccuracyMeters ?? trackerPoint.gps?.locationAccuracyMeters ?? null
+  };
 }
 
 function formatCell(event, key) {
@@ -1409,6 +1495,7 @@ function drawTrailMap(groups) {
     elements.gpsMap.innerHTML = '<div class="mini-item"><strong>Mapa no disponible</strong><small>No se ha podido cargar Leaflet/OpenStreetMap.</small></div>';
     elements.trailCount.textContent = '0 puntos';
     elements.boundsInfo.textContent = 'Mapa no disponible';
+    state.gpsHomeBounds = null;
     return;
   }
 
@@ -1483,11 +1570,6 @@ function drawTrailMap(groups) {
     });
   });
 
-  state.gpsMapInstance.fitBounds(L.latLngBounds(allLatLngs), {
-    padding: [32, 32],
-    maxZoom: 17
-  });
-
   const lats = bounds.map(([lat]) => lat);
   const lngs = bounds.map(([, lng]) => lng);
   const minLat = Math.min(...lats);
@@ -1498,6 +1580,22 @@ function drawTrailMap(groups) {
   const truckCount = groups.length;
   elements.trailCount.textContent = `${allLatLngs.length} puntos · ${truckCount} camiones`;
   elements.boundsInfo.textContent = `${minLat.toFixed(4)}, ${minLng.toFixed(4)} -> ${maxLat.toFixed(4)}, ${maxLng.toFixed(4)}`;
+
+  if (!state.gpsHomeBounds) {
+    state.gpsHomeBounds = L.latLngBounds(allLatLngs);
+    state.gpsMapInstance.fitBounds(state.gpsHomeBounds, {
+      padding: [32, 32],
+      maxZoom: 17
+    });
+  }
+}
+
+function resetTrackerMapView() {
+  if (!state.gpsMapInstance || !state.gpsHomeBounds) return;
+  state.gpsMapInstance.fitBounds(state.gpsHomeBounds, {
+    padding: [32, 32],
+    maxZoom: 17
+  });
 }
 
 function openGpsPopup(point) {
@@ -1608,18 +1706,22 @@ function exportCsv() {
 
 async function refresh() {
   try {
-    const [summary, events, devices] = await Promise.all([
+    const [summary, events, devices, trackerPoints] = await Promise.all([
       requestJson('/api/summary'),
       requestJson('/api/events/search?limit=1000'),
-      requestJson('/api/devices').catch(() => [])
+      requestJson('/api/devices').catch(() => []),
+      requestJson('/api/tracker?limit=5000').catch(() => [])
     ]);
+    const trackerLookup = buildTrackerLookup(trackerPoints || []);
+    const mergedEvents = (events || []).map((event) => mergeTrackerLocation(event, trackerLookup));
+    const mergedLatestEvent = summary?.latestEvent ? mergeTrackerLocation(summary.latestEvent, trackerLookup) : null;
 
     state.summary = summary;
-    state.allEvents = events || [];
+    state.allEvents = mergedEvents;
     state.historyEvents = state.allEvents.filter((event) => event.signal !== 'control_heartbeat' && event.signal !== 'gps');
     state.heartbeatEvents = state.allEvents.filter((event) => event.signal === 'control_heartbeat');
     state.devices = devices || [];
-    state.latestEvent = summary.latestEvent || state.historyEvents[0] || null;
+    state.latestEvent = mergedLatestEvent || state.historyEvents[0] || null;
     state.trackerDeviceId = state.latestEvent?.truckId || state.latestEvent?.deviceId || state.devices[0]?.deviceId || state.trackerDeviceId;
 
     elements.apiStatus.textContent = 'Conectado';
@@ -1629,12 +1731,12 @@ async function refresh() {
     syncTrackerDateControls();
 
     const { selectedDate, from, to } = getTrackerRequestRange();
-    const trackerPoints = await requestJson(
+    const trackerPointsForDay = await requestJson(
       `/api/tracker?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=5000`
     );
     state.trackerDate = selectedDate;
     saveTrackerDate();
-    renderTracker(trackerPoints || []);
+    renderTracker(trackerPointsForDay || []);
   } catch (error) {
     elements.apiStatus.textContent = 'Sin conexión';
     console.error(error);
@@ -1694,6 +1796,7 @@ function setupListeners() {
   elements.trackerDateInput?.addEventListener('change', () => {
     state.trackerFollowToday = false;
     state.trackerDate = elements.trackerDateInput.value || getTodayIsoDate();
+    state.gpsHomeBounds = null;
     saveTrackerDate();
     saveTrackerFollowToday();
     refresh();
@@ -1701,11 +1804,13 @@ function setupListeners() {
   elements.trackerTodayBtn?.addEventListener('click', () => {
     state.trackerFollowToday = true;
     state.trackerDate = getTodayIsoDate();
+    state.gpsHomeBounds = null;
     saveTrackerDate();
     saveTrackerFollowToday();
     syncTrackerDateControls();
     refresh();
   });
+  elements.trackerHomeBtn?.addEventListener('click', resetTrackerMapView);
 
   elements.sensorSelect?.addEventListener('change', () => {
     if (elements.sensorSelect.value) {

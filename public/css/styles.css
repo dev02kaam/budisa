@@ -473,6 +473,10 @@ body[data-theme="night"] .theme-icon-sun {
   flex-wrap: wrap;
 }
 
+.tracker-controls button {
+  white-space: nowrap;
+}
+
 .tracker-controls input[type="date"] {
   min-width: 168px;
   padding: 11px 12px;

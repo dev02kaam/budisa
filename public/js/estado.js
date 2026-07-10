@@ -204,13 +204,39 @@ function buildTrackerLookup(points = []) {
     const key = String(point.deviceId || point.truckId || '').trim();
     if (!key) return;
 
-    const current = lookup.get(key);
-    if (!current || new Date(point.receivedAt) > new Date(current.receivedAt)) {
-      lookup.set(key, point);
-    }
+    const list = lookup.get(key) || [];
+    list.push(point);
+    lookup.set(key, list);
+  });
+
+  lookup.forEach((list) => {
+    list.sort((left, right) => new Date(left.receivedAt) - new Date(right.receivedAt));
   });
 
   return lookup;
+}
+
+function findTrackerPointForEvent(event, trackerLookup) {
+  const key = String(event.deviceId || event.truckId || '').trim();
+  const candidates = trackerLookup.get(key);
+  if (!candidates || !candidates.length) {
+    return null;
+  }
+
+  const eventTime = new Date(event.receivedAt).getTime();
+  if (Number.isNaN(eventTime)) {
+    return candidates[candidates.length - 1];
+  }
+
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const candidate = candidates[index];
+    const candidateTime = new Date(candidate.receivedAt).getTime();
+    if (!Number.isNaN(candidateTime) && candidateTime <= eventTime) {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
 }
 
 function mergeTrackerLocation(event, trackerLookup) {
@@ -220,8 +246,7 @@ function mergeTrackerLocation(event, trackerLookup) {
     return event;
   }
 
-  const key = String(event.deviceId || event.truckId || '').trim();
-  const trackerPoint = trackerLookup.get(key);
+  const trackerPoint = findTrackerPointForEvent(event, trackerLookup);
   if (!trackerPoint) {
     return event;
   }
