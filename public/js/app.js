@@ -1418,8 +1418,9 @@ function compactTrackerPoints(points, minDistanceMeters = 500) {
     const current = points[index];
     const lastKept = compacted[compacted.length - 1];
     const isBascula = current.signal === 'bascula_subida' || current.signal === 'bascula_bajada';
+    const locationSourceChanged = getLocationSource(current) !== getLocationSource(lastKept);
     const distance = haversineDistanceMeters(lastKept, current);
-    if (isBascula || distance >= minDistanceMeters) {
+    if (isBascula || locationSourceChanged || distance >= minDistanceMeters) {
       compacted.push(current);
     }
   }
