@@ -8,8 +8,8 @@ const STORAGE_KEYS = {
 const COLUMN_DEFS = [
   { key: 'receivedAt', label: 'Fecha' },
   { key: 'deviceId', label: 'Dispositivo' },
-  { key: 'truckId', label: 'Truck' },
-  { key: 'signal', label: 'Senal' },
+  { key: 'truckId', label: 'Identificador' },
+  { key: 'signal', label: 'Señal' },
   { key: 'event', label: 'Evento' },
   { key: 'gpioState', label: 'GPIO' },
   { key: 'coords', label: 'GPS' },
@@ -17,9 +17,9 @@ const COLUMN_DEFS = [
 ];
 
 const FIELD_OPTIONS = [
-  { value: 'signal', label: 'Senal' },
+  { value: 'signal', label: 'Señal' },
   { value: 'deviceId', label: 'Dispositivo' },
-  { value: 'truckId', label: 'Truck' },
+  { value: 'truckId', label: 'Identificador' },
   { value: 'event', label: 'Evento' },
   { value: 'reason', label: 'Motivo' },
   { value: 'gpioState', label: 'GPIO' },
@@ -33,12 +33,19 @@ const SIGNAL_LABELS = {
 };
 
 const PAGE_SIZE = 15;
+const TRACKER_ADMIN_SESSION_KEY = 'budisa-tracker-admin-token';
 
 const state = {
   events: [],
   filteredEvents: [],
   page: 1,
-  filters: loadFilters()
+  filters: loadFilters(),
+  trackers: [],
+  adminToken: sessionStorage.getItem(TRACKER_ADMIN_SESSION_KEY) || '',
+  registryLoading: false,
+  registryBusyImei: '',
+  registryFeedback: '',
+  registryFeedbackType: ''
 };
 
 const elements = {
@@ -53,7 +60,17 @@ const elements = {
   count: document.getElementById('heartbeatCount'),
   prevPage: document.getElementById('heartbeatPrevPage'),
   nextPage: document.getElementById('heartbeatNextPage'),
-  pageInfo: document.getElementById('heartbeatPageInfo')
+  pageInfo: document.getElementById('heartbeatPageInfo'),
+  adminAccess: document.getElementById('trackerAdminAccess'),
+  adminTokenInput: document.getElementById('trackerAdminTokenInput'),
+  adminLockBtn: document.getElementById('trackerAdminLockBtn'),
+  registryControls: document.getElementById('trackerRegistryControls'),
+  registerForm: document.getElementById('trackerRegisterForm'),
+  registerImei: document.getElementById('trackerRegisterImei'),
+  registerBtn: document.getElementById('trackerRegisterBtn'),
+  registryFeedback: document.getElementById('trackerRegistryFeedback'),
+  registrySummary: document.getElementById('trackerRegistrySummary'),
+  registryList: document.getElementById('trackerRegistryList')
 };
 
 function loadFilters() {
@@ -643,6 +660,248 @@ function exportCsv() {
   URL.revokeObjectURL(link.href);
 }
 
+async function requestTrackerAdmin(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Tracker-Admin-Token': state.adminToken,
+      ...(options.headers || {})
+    }
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || payload.ok === false) {
+    const error = new Error(payload.error || 'No se ha podido administrar el dispositivo.');
+    error.status = response.status;
+    error.code = payload.code;
+    throw error;
+  }
+
+  return payload.data;
+}
+
+function setRegistryFeedback(message = '', type = '') {
+  state.registryFeedback = message;
+  state.registryFeedbackType = type;
+  if (!elements.registryFeedback) return;
+  elements.registryFeedback.textContent = message;
+  elements.registryFeedback.classList.toggle('is-error', type === 'error');
+  elements.registryFeedback.classList.toggle('is-success', type === 'success');
+}
+
+function formatRegistryDate(value, emptyLabel = 'Sin datos') {
+  if (!value) return emptyLabel;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return emptyLabel;
+  return date.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function trackerStatusPresentation(status) {
+  return {
+    pending: { label: 'Pendiente', className: 'is-pending', action: 'Aprobar', nextEnabled: true },
+    approved: { label: 'Activo', className: 'is-approved', action: 'Deshabilitar', nextEnabled: false },
+    disabled: { label: 'Deshabilitado', className: 'is-disabled', action: 'Reactivar', nextEnabled: true }
+  }[status] || { label: status || 'Desconocido', className: 'is-disabled', action: 'Aprobar', nextEnabled: true };
+}
+
+function renderTrackerRegistry() {
+  if (!elements.registryList) return;
+  const unlocked = Boolean(state.adminToken);
+  elements.adminAccess.hidden = unlocked;
+  elements.registryControls.hidden = !unlocked;
+
+  const approvedCount = state.trackers.filter((tracker) => tracker.status === 'approved').length;
+  const pendingCount = state.trackers.filter((tracker) => tracker.status === 'pending').length;
+  elements.registrySummary.innerHTML = `
+    <span><strong>${approvedCount}</strong> activos</span>
+    <span><strong>${pendingCount}</strong> pendientes</span>
+  `;
+
+  if (!unlocked) {
+    elements.registryList.innerHTML = `
+      <div class="tracker-registry-empty">
+        <strong>Administración bloqueada</strong>
+        <p>Introduce la clave para consultar, aprobar o deshabilitar IMEIs.</p>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.registryLoading) {
+    elements.registryList.innerHTML = `
+      <div class="tracker-registry-empty">
+        <strong>Consultando dispositivos…</strong>
+        <p>Sincronizando el registro guardado en MongoDB.</p>
+      </div>
+    `;
+    return;
+  }
+
+  if (!state.trackers.length) {
+    elements.registryList.innerHTML = `
+      <div class="tracker-registry-empty">
+        <strong>No hay IMEIs registrados</strong>
+        <p>Registra uno ahora o espera al primer intento de conexión para aprobarlo.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const rows = state.trackers.map((tracker) => {
+    const presentation = trackerStatusPresentation(tracker.status);
+    const isBusy = state.registryBusyImei === tracker.imei;
+    const device = [tracker.manufacturer, tracker.model].filter(Boolean).join(' ') || 'Teltonika';
+    return `
+      <article class="tracker-registry-row" data-status="${escapeHtml(tracker.status)}">
+        <div>
+          <span>IMEI</span>
+          <strong>${escapeHtml(tracker.imei)}</strong>
+          <small>${escapeHtml(device)}</small>
+        </div>
+        <div>
+          <span>Estado</span>
+          <b class="tracker-device-status ${presentation.className}">${presentation.label}</b>
+        </div>
+        <div>
+          <span>Primera detección</span>
+          <time>${escapeHtml(formatRegistryDate(tracker.firstSeenAt, 'Registro manual'))}</time>
+        </div>
+        <div>
+          <span>Último intento</span>
+          <time>${escapeHtml(formatRegistryDate(tracker.lastAttemptAt))}</time>
+        </div>
+        <div>
+          <span>Último dato aceptado</span>
+          <time>${escapeHtml(formatRegistryDate(tracker.lastSeenAt))}</time>
+        </div>
+        <div>
+          <span>Acción</span>
+          <button
+            class="tracker-registry-action${presentation.nextEnabled ? '' : ' is-danger'}"
+            type="button"
+            data-tracker-imei="${escapeHtml(tracker.imei)}"
+            data-next-enabled="${presentation.nextEnabled}"
+            ${isBusy ? 'disabled' : ''}
+          >${isBusy ? 'Guardando…' : presentation.action}</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  elements.registryList.innerHTML = `
+    <div class="tracker-registry-columns" aria-hidden="true">
+      <span>IMEI</span><span>Estado</span><span>Primera detección</span><span>Último intento</span><span>Último dato</span><span>Acción</span>
+    </div>
+    ${rows}
+  `;
+}
+
+async function loadTrackerRegistry({ silent = false } = {}) {
+  if (!state.adminToken || state.registryLoading) return;
+  state.registryLoading = true;
+  if (!silent) setRegistryFeedback('Consultando el registro de dispositivos…');
+  renderTrackerRegistry();
+
+  try {
+    state.trackers = await requestTrackerAdmin('/api/trackers');
+    if (!silent) setRegistryFeedback('Registro de dispositivos actualizado.', 'success');
+  } catch (error) {
+    if (error.status === 401) {
+      state.adminToken = '';
+      sessionStorage.removeItem(TRACKER_ADMIN_SESSION_KEY);
+      setRegistryFeedback('La clave no es válida. Comprueba TRACKER_ADMIN_TOKEN.', 'error');
+    } else {
+      setRegistryFeedback(error.message, 'error');
+    }
+  } finally {
+    state.registryLoading = false;
+    renderTrackerRegistry();
+  }
+}
+
+async function unlockTrackerRegistry(event) {
+  event?.preventDefault();
+  const token = elements.adminTokenInput?.value.trim() || '';
+  if (!token) {
+    setRegistryFeedback('Introduce la clave de administración.', 'error');
+    elements.adminTokenInput?.focus();
+    return;
+  }
+  state.adminToken = token;
+  sessionStorage.setItem(TRACKER_ADMIN_SESSION_KEY, token);
+  if (elements.adminTokenInput) elements.adminTokenInput.value = '';
+  renderTrackerRegistry();
+  await loadTrackerRegistry();
+}
+
+function lockTrackerRegistry() {
+  state.adminToken = '';
+  state.trackers = [];
+  sessionStorage.removeItem(TRACKER_ADMIN_SESSION_KEY);
+  setRegistryFeedback('Acceso de administración cerrado.');
+  renderTrackerRegistry();
+}
+
+async function registerTrackerImei(event) {
+  event.preventDefault();
+  const imei = elements.registerImei?.value.trim() || '';
+  if (!/^\d{15}$/.test(imei)) {
+    setRegistryFeedback('El IMEI debe contener exactamente 15 dígitos.', 'error');
+    elements.registerImei?.focus();
+    return;
+  }
+
+  state.registryBusyImei = imei;
+  elements.registerBtn.disabled = true;
+  elements.registerBtn.textContent = 'Registrando…';
+  setRegistryFeedback(`Registrando el IMEI ${imei}…`);
+
+  try {
+    await requestTrackerAdmin('/api/trackers', {
+      method: 'POST',
+      body: JSON.stringify({ imei })
+    });
+    elements.registerForm.reset();
+    setRegistryFeedback(`IMEI ${imei} registrado y habilitado.`, 'success');
+    await loadTrackerRegistry({ silent: true });
+  } catch (error) {
+    setRegistryFeedback(error.message, 'error');
+  } finally {
+    state.registryBusyImei = '';
+    elements.registerBtn.disabled = false;
+    elements.registerBtn.textContent = 'Registrar IMEI';
+    renderTrackerRegistry();
+  }
+}
+
+async function updateTrackerApproval(button) {
+  const imei = button.dataset.trackerImei;
+  const nextEnabled = button.dataset.nextEnabled === 'true';
+  if (!imei) return;
+  if (!nextEnabled && !window.confirm(`¿Deshabilitar el IMEI ${imei}? Dejará de aceptar posiciones hasta que lo reactives.`)) {
+    return;
+  }
+
+  state.registryBusyImei = imei;
+  renderTrackerRegistry();
+  setRegistryFeedback(`${nextEnabled ? 'Habilitando' : 'Deshabilitando'} el IMEI ${imei}…`);
+
+  try {
+    await requestTrackerAdmin(`/api/trackers/${encodeURIComponent(imei)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled: nextEnabled })
+    });
+    setRegistryFeedback(`IMEI ${imei} ${nextEnabled ? 'habilitado' : 'deshabilitado'}.`, 'success');
+    await loadTrackerRegistry({ silent: true });
+  } catch (error) {
+    setRegistryFeedback(error.message, 'error');
+  } finally {
+    state.registryBusyImei = '';
+    renderTrackerRegistry();
+  }
+}
+
 async function refresh() {
   try {
     const [heartbeats, trackerPoints] = await Promise.all([
@@ -652,6 +911,9 @@ async function refresh() {
     const trackerLookup = buildTrackerLookup(trackerPoints || []);
     state.events = (heartbeats || []).map((event) => mergeTrackerLocation(event, trackerLookup));
     applyFilters();
+    if (state.adminToken && !state.registryLoading && !state.registryBusyImei) {
+      loadTrackerRegistry({ silent: true });
+    }
   } catch (error) {
     console.error(error);
     if (elements.count) {
@@ -661,6 +923,13 @@ async function refresh() {
 }
 
 function setupListeners() {
+  elements.adminAccess?.addEventListener('submit', unlockTrackerRegistry);
+  elements.adminLockBtn?.addEventListener('click', lockTrackerRegistry);
+  elements.registerForm?.addEventListener('submit', registerTrackerImei);
+  elements.registryList?.addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-tracker-imei]');
+    if (button) updateTrackerApproval(button);
+  });
   elements.addFilterBtn?.addEventListener('click', () => addFilterRow());
   elements.clearFiltersBtn?.addEventListener('click', clearFilters);
   elements.resetColumnsBtn?.addEventListener('click', () => {
@@ -682,7 +951,9 @@ function setupListeners() {
 
 function boot() {
   renderFilters();
+  renderTrackerRegistry();
   setupListeners();
+  if (state.adminToken) loadTrackerRegistry();
   refresh();
   setInterval(refresh, 8000);
 }

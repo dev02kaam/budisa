@@ -3,12 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Budisa | Sensor de Imán</title>
+  <title>Budisa | Telemetría GPS</title>
   <link rel="icon" href="/assets/logoyfavicon.png" type="image/png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body data-theme="night">
+  <!--
+    THESIS: La posición real manda; se evita el dashboard de tarjetas iguales y el mapa se convierte en la superficie principal de trabajo.
+    OWN-WORLD: Grafito operativo, azul Budisa y turquesa GNSS; controles compactos, líneas cartográficas atenuadas y recorridos de alto contraste.
+    STORY: El operador confirma conexión, identifica el vehículo, entiende su estado actual y abre cualquier jornada para reconstruir el trayecto.
+    FIRST VIEWPORT: Barra de dispositivo y telemetría sobre un mapa dominante; selector temporal encima, resumen de ruta debajo e histórico diario a la derecha.
+    FORM: Consola telemática operativa inspirada por la referencia aportada, adaptada a Budisa y a la cartografía OpenStreetMap.
+    FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+  -->
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
@@ -68,11 +76,11 @@
       <section class="sidebar-card">
         <h3>Funciones extra</h3>
         <ul>
-          <li>Estado online/offline por dispositivo</li>
-          <li>Filtros apilables con reglas combinables</li>
-          <li>Columnas reordenables por drag and drop</li>
-          <li>Mini historial de posiciones GPS</li>
-          <li>Exportación y vista adaptable de tema</li>
+          <li>Recepción FTC880 mediante gateway TCP</li>
+          <li>Asociación segura por IMEI registrado</li>
+          <li>Estado GNSS y recorrido de la jornada</li>
+          <li>Histórico diario con mapa completo</li>
+          <li>Base preparada para FTC887 y EYE Sensor</li>
         </ul>
       </section>
     </aside>
@@ -185,6 +193,48 @@
       </section>
 
       <section class="view" id="view-estado" data-view="estado">
+        <section class="tracker-registry panel" aria-labelledby="trackerRegistryTitle">
+          <header class="tracker-registry-header">
+            <div>
+              <h3 id="trackerRegistryTitle">Dispositivos Teltonika</h3>
+              <p>Aprueba los IMEIs que pueden enviar posiciones a Budisa.</p>
+            </div>
+            <div class="tracker-registry-summary" id="trackerRegistrySummary" aria-label="Resumen de dispositivos">
+              <span><strong>0</strong> activos</span>
+              <span><strong>0</strong> pendientes</span>
+            </div>
+          </header>
+
+          <form class="tracker-admin-access" id="trackerAdminAccess">
+            <input type="text" name="username" value="tracker-admin" autocomplete="username" hidden aria-hidden="true" tabindex="-1" />
+            <label for="trackerAdminTokenInput">
+              <span>Clave de administración</span>
+              <input id="trackerAdminTokenInput" name="password" type="password" autocomplete="current-password" placeholder="Introduce la clave configurada en Render" />
+            </label>
+            <button class="primary-btn" id="trackerAdminUnlockBtn" type="submit">Acceder</button>
+            <p>La clave se conserva solo durante esta pestaña y nunca se añade a la URL.</p>
+          </form>
+
+          <div class="tracker-registry-controls" id="trackerRegistryControls" hidden>
+            <form class="tracker-register-form" id="trackerRegisterForm">
+              <label for="trackerRegisterImei">
+                <span>Registrar un IMEI antes de conectarlo</span>
+                <input id="trackerRegisterImei" name="imei" inputmode="numeric" autocomplete="off" maxlength="15" pattern="[0-9]{15}" placeholder="862129089568731" required />
+              </label>
+              <button class="primary-btn" id="trackerRegisterBtn" type="submit">Registrar IMEI</button>
+            </form>
+            <button class="ghost-btn tracker-admin-lock" id="trackerAdminLockBtn" type="button">Cerrar acceso</button>
+          </div>
+
+          <div class="tracker-registry-feedback" id="trackerRegistryFeedback" role="status" aria-live="polite"></div>
+          <div class="tracker-registry-list" id="trackerRegistryList">
+            <div class="tracker-registry-empty">
+              <strong>Administración bloqueada</strong>
+              <p>Introduce la clave para consultar, aprobar o deshabilitar IMEIs.</p>
+            </div>
+          </div>
+        </section>
+
         <section class="grid grid-history-controls">
           <article class="panel panel-wide">
             <div class="panel-header">
@@ -225,35 +275,78 @@
       </section>
 
       <section class="view" id="view-tracker" data-view="tracker">
-        <section class="grid grid-tracker">
-          <article class="panel panel-wide">
-            <div class="panel-header">
-              <div>
-                <h3>Tracker GPS</h3>
-                <p>Ruta diaria por camión con puntos y eventos de báscula</p>
+        <section class="tracker-workspace">
+          <article class="tracker-console">
+            <header class="tracker-device-bar">
+              <div class="tracker-device-identity">
+                <span class="tracker-device-symbol" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M3 6.5h11.5v9H3v-9Zm12.8 3H19l2 2.4v3.6h-1.2a2.6 2.6 0 0 0-5.1 0h-1V8.2h2.1v1.3ZM8 18.7a2.2 2.2 0 1 1 0-4.4 2.2 2.2 0 0 1 0 4.4Zm9.3 0a2.2 2.2 0 1 1 0-4.4 2.2 2.2 0 0 1 0 4.4Z"/></svg>
+                </span>
+                <div>
+                  <div class="tracker-status-line">
+                    <span class="tracker-connection-dot" id="trackerConnectionDot"></span>
+                    <span id="trackerConnectionLabel">Esperando dispositivo</span>
+                  </div>
+                  <strong id="trackerDeviceName">Esperando IMEI</strong>
+                  <span id="trackerDeviceMeta">FTC880 · sin telemetría</span>
+                </div>
               </div>
-              <div class="tracker-controls">
-                <input id="trackerDateInput" type="date" aria-label="Seleccionar día del tracker" />
-                <button class="ghost-btn tracker-today-btn" id="trackerTodayBtn" type="button">Hoy</button>
-                <button class="ghost-btn tracker-home-btn" id="trackerHomeBtn" type="button">Volver al origen</button>
+
+              <label class="tracker-device-select-wrap" for="trackerDeviceSelect">
+                <span>IMEI</span>
+                <select id="trackerDeviceSelect" aria-label="Seleccionar IMEI"></select>
+              </label>
+
+              <div class="tracker-live-metrics" aria-label="Telemetría actual">
+                <div><span>Velocidad</span><strong id="trackerSpeed">--</strong><small>km/h</small></div>
+                <div><span>Satélites</span><strong id="trackerSatellites">--</strong><small>GNSS</small></div>
+                <div><span>Contacto</span><strong id="trackerIgnition">--</strong><small>ignición</small></div>
+                <div><span>Último dato</span><strong id="trackerLastSeen">--</strong><small id="trackerLastSeenDate">sin enlace</small></div>
+              </div>
+            </header>
+
+            <div class="tracker-map-stage">
+              <div id="gpsMap" role="img" aria-label="Mapa GPS de Budisa con cartografía OpenStreetMap"></div>
+              <div class="tracker-map-toolbar">
+                <label for="trackerDateInput">
+                  <span>Jornada</span>
+                  <input id="trackerDateInput" type="date" aria-label="Seleccionar día del tracker" />
+                </label>
+                <button class="tracker-map-action" id="trackerTodayBtn" type="button">Hoy</button>
+                <button class="tracker-map-action" id="trackerHomeBtn" type="button">Encuadrar ruta</button>
+              </div>
+              <div class="tracker-map-legend" aria-label="Leyenda del mapa">
+                <span><i class="legend-line"></i>Recorrido</span>
+                <span><i class="legend-current"></i>Posición</span>
+                <span><i class="legend-event"></i>Evento</span>
+              </div>
+              <div class="tracker-map-empty" id="trackerMapEmpty" hidden>
+                <span class="tracker-map-empty-pulse"></span>
+                <strong>Esperando la primera posición GPS</strong>
+                <p>El mapa se activará cuando Budisa acepte un registro del FTC880.</p>
               </div>
             </div>
-            <div class="tracker-box">
-              <div id="gpsMap" role="img" aria-label="Mapa GPS con OpenStreetMap"></div>
-            </div>
-            <div class="tracker-meta">
-              <span id="trailCount">0 puntos</span>
-              <span id="boundsInfo">Sin datos</span>
-            </div>
+
+            <footer class="tracker-route-strip">
+              <div><span>Distancia</span><strong id="trackerDistance">0 km</strong></div>
+              <div><span>Duración</span><strong id="trackerDuration">--</strong></div>
+              <div><span>Puntos recibidos</span><strong id="trailCount">0</strong></div>
+              <div><span>Velocidad máxima</span><strong id="trackerMaxSpeed">0 km/h</strong></div>
+              <p id="boundsInfo">Sin recorrido para la jornada seleccionada</p>
+            </footer>
           </article>
 
-          <article class="panel">
-            <div class="panel-header">
-              <h3>Mini historial</h3>
-              <p>Últimas posiciones</p>
+          <aside class="tracker-days-panel">
+            <div class="tracker-days-header">
+              <div>
+                <h3>Histórico de rutas</h3>
+                <p>Selecciona una jornada para abrir el recorrido completo.</p>
+              </div>
+              <span class="tracker-days-count" id="trackerDaysCount">0 días</span>
             </div>
-            <div class="mini-trail" id="trailList"></div>
-          </article>
+            <div class="tracker-days-list" id="routeDaysList"></div>
+            <div class="tracker-points-timeline" id="trailList" hidden></div>
+          </aside>
         </section>
       </section>
 
@@ -287,13 +380,14 @@
 
   <dialog class="gps-popup-dialog" id="gpsPopupDialog">
     <form method="dialog" class="gps-popup-card">
-      <div class="column-dialog-header">
+      <div class="route-dialog-header">
         <div>
-          <h3 id="gpsPopupTitle">Punto GPS</h3>
-          <p id="gpsPopupMeta">Detalle del punto seleccionado</p>
+          <h3 id="gpsPopupTitle">Recorrido GPS</h3>
+          <p id="gpsPopupMeta">Detalle de la jornada seleccionada</p>
         </div>
         <button class="column-dialog-close" type="button" id="gpsPopupClose" aria-label="Cerrar">&times;</button>
       </div>
+      <div class="route-dialog-stats" id="gpsPopupStats"></div>
       <div class="gps-popup-map" id="gpsPopupMap" aria-label="Mapa de punto GPS seleccionado"></div>
     </form>
   </dialog>

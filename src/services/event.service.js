@@ -4,8 +4,22 @@ const HeartbeatEvent = require('../models/HeartbeatEvent');
 const Device = require('../models/Device');
 const { getTelemetryDestinations } = require('../utils/telemetry');
 
+function toValidDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getPointDate(point) {
+  return toValidDate(point.positionAt)
+    || toValidDate(point.gpsTimestamp)
+    || toValidDate(point.gps?.timestamp)
+    || toValidDate(point.receivedAt);
+}
+
 function buildCommonDoc(payload, category) {
   const rawGps = payload.gpsRaw || {};
+  const gpsTimestamp = rawGps.gpsTimestamp ?? payload.gpsTimestamp ?? payload.gps?.timestamp ?? null;
   return {
     ...payload,
     category,
@@ -23,7 +37,8 @@ function buildCommonDoc(payload, category) {
     lat: rawGps.lat ?? payload.lat ?? payload.gps?.latitude ?? null,
     lon: rawGps.lon ?? payload.lon ?? payload.gps?.longitude ?? null,
     speed: rawGps.speed ?? payload.speed ?? payload.gps?.speed ?? null,
-    gpsTimestamp: rawGps.gpsTimestamp ?? payload.gpsTimestamp ?? payload.gps?.timestamp ?? null,
+    gpsTimestamp,
+    positionAt: toValidDate(payload.positionAt) || toValidDate(gpsTimestamp),
     locationSource: rawGps.locationSource ?? payload.locationSource ?? payload.gps?.locationSource ?? null,
     locationProvider: rawGps.locationProvider ?? payload.locationProvider ?? payload.gps?.locationProvider ?? null,
     locationAccuracyMeters:
@@ -164,7 +179,8 @@ async function getTrail(deviceId, limit = 100) {
 async function getTrackerPoints(filters = {}, limit = 5000) {
   const query = {
     'gps.latitude': { $ne: null },
-    'gps.longitude': { $ne: null }
+    'gps.longitude': { $ne: null },
+    'metadata.gpsValid': { $ne: false }
   };
 
   if (filters.deviceId) {
@@ -176,16 +192,109 @@ async function getTrackerPoints(filters = {}, limit = 5000) {
   }
 
   if (filters.from || filters.to) {
-    query.receivedAt = {};
+    const range = {};
     if (filters.from) {
-      query.receivedAt.$gte = new Date(filters.from);
+      range.$gte = new Date(filters.from);
     }
     if (filters.to) {
-      query.receivedAt.$lte = new Date(filters.to);
+      range.$lt = new Date(filters.to);
     }
+    query.$or = [
+      { positionAt: range },
+      { positionAt: null, receivedAt: range }
+    ];
   }
 
-  return TrackerPoint.find(query).sort({ receivedAt: 1 }).limit(limit).lean();
+  if (filters.from || filters.to) {
+    return TrackerPoint.find(query).sort({ positionAt: 1, receivedAt: 1 }).limit(limit).lean();
+  }
+
+  const latest = await TrackerPoint.find(query).sort({ positionAt: -1, receivedAt: -1 }).limit(limit).lean();
+  return latest.reverse();
+}
+
+function dayKeyFor(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Madrid',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date);
+}
+
+function haversineDistanceMeters(left, right) {
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const earthRadius = 6371000;
+  const deltaLatitude = toRadians(right.latitude - left.latitude);
+  const deltaLongitude = toRadians(right.longitude - left.longitude);
+  const latitude1 = toRadians(left.latitude);
+  const latitude2 = toRadians(right.latitude);
+  const a = Math.sin(deltaLatitude / 2) ** 2
+    + Math.cos(latitude1) * Math.cos(latitude2) * Math.sin(deltaLongitude / 2) ** 2;
+  return 2 * earthRadius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function getTrackerDays(filters = {}, limit = 30) {
+  const query = {
+    'gps.latitude': { $ne: null },
+    'gps.longitude': { $ne: null },
+    'metadata.gpsValid': { $ne: false }
+  };
+
+  if (filters.deviceId) query.deviceId = filters.deviceId;
+  if (filters.truckId) query.truckId = filters.truckId;
+
+  const points = await TrackerPoint.find(query)
+    .sort({ positionAt: -1, receivedAt: -1 })
+    .limit(20000)
+    .lean();
+  const groups = new Map();
+
+  points.forEach((point) => {
+    const timestamp = getPointDate(point);
+    const latitude = Number(point.gps?.latitude ?? point.lat);
+    const longitude = Number(point.gps?.longitude ?? point.lon);
+    if (!timestamp || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+    const imei = String(point.metadata?.imei || point.deviceId || point.truckId || 'Sin IMEI');
+    const date = dayKeyFor(timestamp);
+    const key = `${imei}|${date}`;
+    const item = {
+      timestamp,
+      latitude,
+      longitude,
+      speed: Number(point.gps?.speed ?? point.speed ?? 0)
+    };
+    const group = groups.get(key) || {
+      date,
+      imei,
+      pointCount: 0,
+      startAt: timestamp,
+      endAt: timestamp,
+      maxSpeedKph: 0,
+      distanceMeters: 0,
+      ordered: []
+    };
+
+    group.pointCount += 1;
+    if (timestamp < group.startAt) group.startAt = timestamp;
+    if (timestamp > group.endAt) group.endAt = timestamp;
+    group.maxSpeedKph = Math.max(group.maxSpeedKph, Number.isFinite(item.speed) ? item.speed : 0);
+    group.ordered.push(item);
+    groups.set(key, group);
+  });
+
+  return [...groups.values()]
+    .map((group) => {
+      group.ordered.sort((left, right) => left.timestamp - right.timestamp);
+      for (let index = 1; index < group.ordered.length; index += 1) {
+        group.distanceMeters += haversineDistanceMeters(group.ordered[index - 1], group.ordered[index]);
+      }
+      const { ordered, ...summary } = group;
+      return summary;
+    })
+    .sort((left, right) => right.endAt - left.endAt)
+    .slice(0, limit);
 }
 
 async function getTrailSummary(deviceId, limit = 30) {
@@ -240,6 +349,7 @@ module.exports = {
   getSummary,
   getTrail,
   getTrackerPoints,
+  getTrackerDays,
   getTrailSummary,
   getDevices,
   getInsights,

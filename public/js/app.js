@@ -6,10 +6,12 @@
   visibleColumns: 'budisa-visible-columns',
   selectedSensors: 'budisa-selected-sensors',
   trackerDate: 'budisa-tracker-date',
-  trackerFollowToday: 'budisa-tracker-follow-today'
+  trackerFollowToday: 'budisa-tracker-follow-today',
+  trackerDevice: 'budisa-tracker-device'
 };
 
 const SENSOR_COLORS = ['#6ea8ff', '#61d8b9', '#f6c177', '#b57bff', '#ff6c7a', '#8bd3ff'];
+const TRACKER_ROUTE_COLORS = ['#2dd4bf', '#4f8cff', '#f4b942', '#bb86fc', '#ff667d', '#74d4ff'];
 const SIGNAL_KEYS = ['bascula_subida', 'bascula_bajada', 'bascula_levantada', 'estado_estable', 'alerta'];
 const SIGNAL_BAR_COLORS = ['#61d8b9', '#6ea8ff', '#f6c177', '#b57bff', '#ff6c7a'];
 const PAGE_SIZE = 15;
@@ -17,7 +19,7 @@ const PAGE_SIZE = 15;
 const COLUMN_DEFS = [
   { key: 'receivedAt', label: 'Fecha' },
   { key: 'deviceId', label: 'Dispositivo' },
-  { key: 'truckId', label: 'Truck' },
+  { key: 'truckId', label: 'Identificador' },
   { key: 'signal', label: 'Señal' },
   { key: 'event', label: 'Evento' },
   { key: 'gpioState', label: 'GPIO' },
@@ -28,7 +30,7 @@ const COLUMN_DEFS = [
 const FIELD_OPTIONS = [
   { value: 'signal', label: 'Señal' },
   { value: 'deviceId', label: 'Dispositivo' },
-  { value: 'truckId', label: 'Truck' },
+  { value: 'truckId', label: 'Identificador' },
   { value: 'event', label: 'Evento' },
   { value: 'reason', label: 'Motivo' },
   { value: 'gpioState', label: 'GPIO' },
@@ -48,7 +50,7 @@ const SIGNAL_LABELS = {
 
 const state = {
   theme: localStorage.getItem(STORAGE_KEYS.theme) || 'night',
-  view: localStorage.getItem(STORAGE_KEYS.view) || 'dashboard',
+  view: localStorage.getItem(STORAGE_KEYS.view) || 'tracker',
   summary: null,
   allEvents: [],
   historyEvents: [],
@@ -59,20 +61,26 @@ const state = {
   latestEvent: null,
   trail: [],
   trailGroups: [],
+  trackerDays: [],
+  latestTrackerPoints: [],
+  gatewayStatus: null,
   devices: [],
   filters: loadFilters(),
   columns: loadColumns(),
   selectedSensors: loadSelectedSensors(),
   trackerDate: loadTrackerDate(),
   trackerFollowToday: loadTrackerFollowToday(),
-  trackerDeviceId: 'raspberry-1',
+  trackerDeviceId: localStorage.getItem(STORAGE_KEYS.trackerDevice) || '',
   gpsMapInstance: null,
+  gpsTileLayer: null,
   gpsHomeBounds: null,
   gpsPolyline: null,
   gpsMarkers: [],
   trackerLayers: [],
   gpsPopupMapInstance: null,
+  gpsPopupTileLayer: null,
   gpsPopupMarker: null,
+  gpsPopupLayers: [],
   dragColumnKey: null,
   columnDialogSelected: new Set(),
   refreshTimer: null
@@ -116,16 +124,33 @@ const elements = {
   historyNextPage: document.getElementById('historyNextPage'),
   historyPageInfo: document.getElementById('historyPageInfo'),
   trackerDateInput: document.getElementById('trackerDateInput'),
+  trackerDeviceSelect: document.getElementById('trackerDeviceSelect'),
   trackerTodayBtn: document.getElementById('trackerTodayBtn'),
   trackerHomeBtn: document.getElementById('trackerHomeBtn'),
   gpsMap: document.getElementById('gpsMap'),
+  trackerMapEmpty: document.getElementById('trackerMapEmpty'),
+  trackerConnectionDot: document.getElementById('trackerConnectionDot'),
+  trackerConnectionLabel: document.getElementById('trackerConnectionLabel'),
+  trackerDeviceName: document.getElementById('trackerDeviceName'),
+  trackerDeviceMeta: document.getElementById('trackerDeviceMeta'),
+  trackerSpeed: document.getElementById('trackerSpeed'),
+  trackerSatellites: document.getElementById('trackerSatellites'),
+  trackerIgnition: document.getElementById('trackerIgnition'),
+  trackerLastSeen: document.getElementById('trackerLastSeen'),
+  trackerLastSeenDate: document.getElementById('trackerLastSeenDate'),
+  trackerDistance: document.getElementById('trackerDistance'),
+  trackerDuration: document.getElementById('trackerDuration'),
+  trackerMaxSpeed: document.getElementById('trackerMaxSpeed'),
   trailCount: document.getElementById('trailCount'),
   boundsInfo: document.getElementById('boundsInfo'),
   trailList: document.getElementById('trailList'),
+  routeDaysList: document.getElementById('routeDaysList'),
+  trackerDaysCount: document.getElementById('trackerDaysCount'),
   gpsPopupDialog: document.getElementById('gpsPopupDialog'),
   gpsPopupMap: document.getElementById('gpsPopupMap'),
   gpsPopupMeta: document.getElementById('gpsPopupMeta'),
   gpsPopupTitle: document.getElementById('gpsPopupTitle'),
+  gpsPopupStats: document.getElementById('gpsPopupStats'),
   gpsPopupClose: document.getElementById('gpsPopupClose'),
   views: Array.from(document.querySelectorAll('.view')),
   navButtons: Array.from(document.querySelectorAll('.nav-item'))
@@ -250,6 +275,71 @@ function setVisibleSet(nextVisible) {
 function formatDate(value) {
   if (!value) return '-';
   return new Date(value).toLocaleString('es-ES');
+}
+
+function getPointTimestamp(point) {
+  return point?.positionAt || point?.gpsTimestamp || point?.gps?.timestamp || point?.receivedAt || null;
+}
+
+function getTrackerIdentity(point) {
+  return String(point?.metadata?.imei || point?.imei || point?.deviceId || point?.truckId || '').trim();
+}
+
+function formatPointDate(point) {
+  return formatDate(getPointTimestamp(point));
+}
+
+function formatRouteDay(dateIso) {
+  if (!dateIso) return '-';
+  const [year, month, day] = dateIso.split('-').map(Number);
+  return new Intl.DateTimeFormat('es-ES', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  }).format(new Date(year, month - 1, day));
+}
+
+function formatRouteDayCompact(dateIso) {
+  if (!dateIso) return '-';
+  const [year, month, day] = dateIso.split('-').map(Number);
+  return new Intl.DateTimeFormat('es-ES', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  }).format(new Date(year, month - 1, day));
+}
+
+function formatClock(value) {
+  if (!value) return '--:--';
+  return new Intl.DateTimeFormat('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(value));
+}
+
+function formatDuration(milliseconds) {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return '--';
+  const totalMinutes = Math.round(milliseconds / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
+}
+
+function formatDistance(meters) {
+  const numeric = Number(meters || 0);
+  if (numeric < 1000) return `${Math.round(numeric)} m`;
+  return `${(numeric / 1000).toFixed(numeric >= 100000 ? 0 : 1)} km`;
+}
+
+function formatRelativeTime(value) {
+  if (!value) return 'sin enlace';
+  const deltaSeconds = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 1000));
+  if (deltaSeconds < 60) return 'ahora';
+  if (deltaSeconds < 3600) return `hace ${Math.floor(deltaSeconds / 60)} min`;
+  if (deltaSeconds < 86400) return `hace ${Math.floor(deltaSeconds / 3600)} h`;
+  return `hace ${Math.floor(deltaSeconds / 86400)} d`;
 }
 
 function signalLabel(signal) {
@@ -1370,21 +1460,21 @@ function applyCurrentFilters() {
 }
 
 function getTrackerPointColor(index) {
-  return SENSOR_COLORS[index % SENSOR_COLORS.length];
+  return TRACKER_ROUTE_COLORS[index % TRACKER_ROUTE_COLORS.length];
 }
 
 function buildTrackerGroups(points) {
   const groups = new Map();
   points.forEach((point) => {
-    const truckKey = point.truckId || point.deviceId || 'Sin camión';
-    if (!groups.has(truckKey)) {
-      groups.set(truckKey, []);
+    const imei = getTrackerIdentity(point) || 'Sin IMEI';
+    if (!groups.has(imei)) {
+      groups.set(imei, []);
     }
-    groups.get(truckKey).push(point);
+    groups.get(imei).push(point);
   });
-  return [...groups.entries()].map(([truckId, truckPoints]) => ({
-    truckId,
-    points: truckPoints.sort((left, right) => new Date(left.receivedAt) - new Date(right.receivedAt))
+  return [...groups.entries()].map(([imei, trackerPoints]) => ({
+    imei,
+    points: trackerPoints.sort((left, right) => new Date(getPointTimestamp(left)) - new Date(getPointTimestamp(right)))
   }));
 }
 
@@ -1406,6 +1496,34 @@ function haversineDistanceMeters(left, right) {
     Math.sin(deltaLat / 2) ** 2 +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(deltaLon / 2) ** 2;
   return 2 * earthRadius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calculateRouteSummary(points = []) {
+  if (!points.length) {
+    return { distanceMeters: 0, durationMs: 0, maxSpeedKph: 0, pointCount: 0 };
+  }
+
+  let distanceMeters = 0;
+  let maxSpeedKph = 0;
+
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    const speed = Number(point.gps?.speed ?? point.speed ?? 0);
+    if (Number.isFinite(speed)) maxSpeedKph = Math.max(maxSpeedKph, speed);
+    if (index > 0) {
+      const distance = haversineDistanceMeters(points[index - 1], point);
+      if (Number.isFinite(distance)) distanceMeters += distance;
+    }
+  }
+
+  const start = new Date(getPointTimestamp(points[0])).getTime();
+  const end = new Date(getPointTimestamp(points[points.length - 1])).getTime();
+  return {
+    distanceMeters,
+    durationMs: Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : 0,
+    maxSpeedKph,
+    pointCount: points.length
+  };
 }
 
 function compactTrackerPoints(points, minDistanceMeters = 500) {
@@ -1435,58 +1553,113 @@ function compactTrackerPoints(points, minDistanceMeters = 500) {
 
 function renderTracker(trailPoints = []) {
   const visiblePoints = trailPoints.filter((event) => getGpsLat(event) !== null && getGpsLng(event) !== null);
-  const trail = visiblePoints.slice(-1000);
+  const trail = visiblePoints.slice(-5000);
   const groups = buildTrackerGroups(trail);
-  const compactGroups = groups.map((group) => ({
-    ...group,
-    points: compactTrackerPoints(group.points, 500)
-  }));
-  state.trailGroups = compactGroups;
-  state.trail = compactGroups.flatMap((group) => group.points);
-  drawTrailMap(compactGroups);
+  state.trailGroups = groups;
+  state.trail = trail;
+  drawTrailMap(groups);
 
-  if (!elements.trailList) return;
+  const selectedPoints = state.trackerDeviceId
+    ? trail.filter((point) => getTrackerIdentity(point) === state.trackerDeviceId)
+    : trail;
+  const routeSummary = calculateRouteSummary(selectedPoints);
+  elements.trackerDistance.textContent = formatDistance(routeSummary.distanceMeters);
+  elements.trackerDuration.textContent = formatDuration(routeSummary.durationMs);
+  elements.trailCount.textContent = String(routeSummary.pointCount);
+  elements.trackerMaxSpeed.textContent = `${Math.round(routeSummary.maxSpeedKph)} km/h`;
+  elements.trackerMapEmpty.hidden = groups.length > 0;
 
-  elements.trailList.innerHTML = compactGroups.length
-    ? compactGroups
-        .slice()
-        .reverse()
-        .map((group, index) => {
-          const latest = group.points[group.points.length - 1];
-          const color = getTrackerPointColor(index);
-          const timeline = group.points
-            .map((point) => {
-              const isUp = point.signal === 'bascula_subida';
-              const isDown = point.signal === 'bascula_bajada';
-              const stepClass = isUp
-                ? 'tracker-step tracker-step-up'
-                : isDown
-                  ? 'tracker-step tracker-step-down'
-                  : 'tracker-step tracker-step-dot';
-              const stepLabel = isUp ? 'Subida' : isDown ? 'Bajada' : 'Ruta';
-              return `
-                <span class="${stepClass}">
-                  <span class="tracker-step-icon">${isUp ? '▲' : isDown ? '▼' : '•'}</span>
-                  <span class="tracker-step-text">${escapeHtml(stepLabel)}</span>
-                  <small>${escapeHtml(formatDate(point.receivedAt))}</small>
-                  <small>${escapeHtml(formatLocation(point))}</small>
-                </span>
-              `;
-            })
-            .join('');
-          return `
-            <article class="mini-item tracker-group" style="--tracker-color: ${color}">
-              <strong>${escapeHtml(group.truckId)}</strong>
-              <div>${escapeHtml(formatLocation(latest))}</div>
-              <small>${group.points.length} puntos visibles · ${escapeHtml(latest?.signal ? signalLabel(latest.signal) : 'GPS')}</small>
-              <div class="tracker-group-points tracker-timeline">
-                ${timeline}
-              </div>
-            </article>
-          `;
-        })
-        .join('')
-    : '<div class="mini-item"><strong>Sin puntos</strong><small>No hay posiciones GPS guardadas</small></div>';
+  if (!groups.length) {
+    elements.boundsInfo.textContent = 'Sin recorrido para la jornada seleccionada';
+  }
+
+  renderTrackerLiveStatus();
+  renderRouteDays();
+}
+
+function renderTrackerDeviceSelector() {
+  if (!elements.trackerDeviceSelect) return;
+  const deviceIds = new Set([
+    state.gatewayStatus?.latestDevice?.imei,
+    ...state.trackerDays.map((day) => day.imei),
+    ...state.latestTrackerPoints.map((point) => getTrackerIdentity(point))
+  ].filter(Boolean));
+
+  if (!state.trackerDeviceId || !deviceIds.has(state.trackerDeviceId)) {
+    state.trackerDeviceId = [...deviceIds][0] || '';
+  }
+
+  elements.trackerDeviceSelect.innerHTML = deviceIds.size
+    ? [...deviceIds].map((deviceId) => {
+        const label = /^\d{15}$/.test(deviceId) ? `IMEI ${deviceId}` : deviceId;
+        return `<option value="${escapeHtml(deviceId)}">${escapeHtml(label)}</option>`;
+      }).join('')
+    : '<option value="">Sin dispositivos</option>';
+  elements.trackerDeviceSelect.value = state.trackerDeviceId;
+  elements.trackerDeviceSelect.disabled = deviceIds.size === 0;
+}
+
+function renderTrackerLiveStatus(points = state.latestTrackerPoints) {
+  const selectedDevice = state.devices.find((device) => device.deviceId === state.trackerDeviceId);
+  const matchingPoints = points.filter((point) => !state.trackerDeviceId || getTrackerIdentity(point) === state.trackerDeviceId);
+  const latestPoint = matchingPoints[matchingPoints.length - 1] || null;
+  const gatewayDevice = state.gatewayStatus?.latestDevice?.imei === state.trackerDeviceId
+    ? state.gatewayStatus.latestDevice
+    : null;
+  const lastSeenAt = selectedDevice?.lastSeenAt || state.gatewayStatus?.lastSeenAt || latestPoint?.receivedAt || null;
+  const lastSeenMs = lastSeenAt ? new Date(lastSeenAt).getTime() : 0;
+  const online = lastSeenMs > 0 && Date.now() - lastSeenMs < 10 * 60_000;
+  const speed = Number(latestPoint?.gps?.speed ?? latestPoint?.speed ?? selectedDevice?.lastGps?.speed);
+  const satellites = Number(latestPoint?.metadata?.satellites);
+  const ignition = latestPoint?.metadata?.ignition;
+  const imei = latestPoint?.metadata?.imei || gatewayDevice?.imei || (/^\d{15}$/.test(state.trackerDeviceId) ? state.trackerDeviceId : null);
+  const model = gatewayDevice?.model || latestPoint?.locationProvider || 'FTC880';
+
+  elements.trackerConnectionDot.classList.toggle('is-online', online);
+  elements.trackerConnectionLabel.textContent = online ? 'Transmitiendo' : lastSeenAt ? 'Sin señal reciente' : 'Esperando dispositivo';
+  elements.trackerDeviceName.textContent = imei ? `IMEI ${imei}` : 'Esperando IMEI';
+  elements.trackerDeviceMeta.textContent = imei ? model : `${model} · sin telemetría`;
+  elements.trackerSpeed.textContent = Number.isFinite(speed) ? String(Math.round(speed)) : '--';
+  elements.trackerSatellites.textContent = Number.isFinite(satellites) ? String(satellites) : '--';
+  elements.trackerIgnition.textContent = ignition === true ? 'ON' : ignition === false ? 'OFF' : '--';
+  elements.trackerLastSeen.textContent = lastSeenAt ? formatClock(lastSeenAt) : '--';
+  elements.trackerLastSeenDate.textContent = formatRelativeTime(lastSeenAt);
+}
+
+function renderRouteDays() {
+  if (!elements.routeDaysList) return;
+  const days = state.trackerDays.filter((day) => !state.trackerDeviceId || day.imei === state.trackerDeviceId);
+  elements.trackerDaysCount.textContent = `${days.length} ${days.length === 1 ? 'día' : 'días'}`;
+  elements.routeDaysList.innerHTML = days.length
+    ? days.map((day) => {
+        const isSelected = day.date === state.trackerDate;
+        return `
+          <button class="route-day-row${isSelected ? ' is-selected' : ''}" type="button" data-route-date="${escapeHtml(day.date)}" data-imei="${escapeHtml(day.imei)}">
+            <span class="route-day-date">
+              <strong>${escapeHtml(formatRouteDayCompact(day.date))}</strong>
+              <small>${escapeHtml(formatClock(day.startAt))}—${escapeHtml(formatClock(day.endAt))}</small>
+            </span>
+            <span class="route-day-distance">${escapeHtml(formatDistance(day.distanceMeters))}</span>
+            <span class="route-day-meta">${day.pointCount} puntos · máx. ${Math.round(day.maxSpeedKph || 0)} km/h</span>
+            <span class="route-day-open" aria-hidden="true">↗</span>
+          </button>
+        `;
+      }).join('')
+    : `
+      <div class="tracker-days-empty">
+        <span></span>
+        <strong>Todavía no hay jornadas</strong>
+        <p>Cuando llegue la primera posición válida aparecerá aquí su recorrido diario.</p>
+      </div>
+    `;
+}
+
+function addBudisaTiles(map) {
+  return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    className: 'budisa-map-tiles'
+  }).addTo(map);
 }
 
 function drawTrailMap(groups) {
@@ -1503,43 +1676,50 @@ function drawTrailMap(groups) {
   if (!state.gpsMapInstance) {
     state.gpsMapInstance = L.map(elements.gpsMap, {
       zoomControl: true,
-      scrollWheelZoom: true
+      scrollWheelZoom: true,
+      preferCanvas: true
     }).setView([40.4168, -3.7038], 6);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap'
-    }).addTo(state.gpsMapInstance);
+    state.gpsTileLayer = addBudisaTiles(state.gpsMapInstance);
+    L.control.scale({ imperial: false, position: 'bottomright' }).addTo(state.gpsMapInstance);
   }
 
   state.gpsMarkers.forEach((marker) => marker.remove());
   state.gpsMarkers = [];
 
   if (!groups.length) {
-    elements.trailCount.textContent = '0 puntos';
-    elements.boundsInfo.textContent = 'Sin datos';
+    state.gpsHomeBounds = null;
+    state.gpsMapInstance.setView([40.4168, -3.7038], 6);
     return;
   }
 
   const allLatLngs = [];
-  const bounds = [];
 
   groups.forEach((group, groupIndex) => {
     const color = getTrackerPointColor(groupIndex);
     const latLngs = group.points.map((point) => [getGpsLat(point), getGpsLng(point)]);
     allLatLngs.push(...latLngs);
 
+    const lineCasing = L.polyline(latLngs, {
+      color: '#07131f',
+      weight: 9,
+      opacity: 0.66,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(state.gpsMapInstance);
     const line = L.polyline(latLngs, {
       color,
       weight: 4,
-      opacity: 0.82
+      opacity: 0.96,
+      lineCap: 'round',
+      lineJoin: 'round'
     }).addTo(state.gpsMapInstance);
-    state.gpsMarkers.push(line);
+    state.gpsMarkers.push(lineCasing, line);
 
-    group.points.forEach((point, index) => {
+    const markerPoints = compactTrackerPoints(group.points, 500);
+    markerPoints.forEach((point, index) => {
       const lat = getGpsLat(point);
       const lng = getGpsLng(point);
-      const isLatest = index === group.points.length - 1;
+      const isLatest = index === markerPoints.length - 1;
       const isLift = point.signal === 'bascula_subida';
       const isLower = point.signal === 'bascula_bajada';
       const iconClass = isLift
@@ -1559,28 +1739,25 @@ function drawTrailMap(groups) {
       const marker = L.marker([lat, lng], { icon })
         .bindPopup(`
           <div class="gps-popup">
-            <strong>${escapeHtml(group.truckId)}</strong>
-            <div>${escapeHtml(formatDate(point.receivedAt))}</div>
+             <strong>IMEI ${escapeHtml(group.imei)}</strong>
+             <div>${escapeHtml(formatPointDate(point))}</div>
             <div>${escapeHtml(formatLocation(point))}</div>
             <small>${escapeHtml(point.reason || signalLabel(point.signal))}</small>
           </div>
         `)
         .addTo(state.gpsMapInstance);
       state.gpsMarkers.push(marker);
-      bounds.push([lat, lng]);
     });
   });
 
-  const lats = bounds.map(([lat]) => lat);
-  const lngs = bounds.map(([, lng]) => lng);
+  const lats = allLatLngs.map(([lat]) => lat);
+  const lngs = allLatLngs.map(([, lng]) => lng);
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
   const maxLng = Math.max(...lngs);
 
-  const truckCount = groups.length;
-  elements.trailCount.textContent = `${allLatLngs.length} puntos · ${truckCount} camiones`;
-  elements.boundsInfo.textContent = `${minLat.toFixed(4)}, ${minLng.toFixed(4)} -> ${maxLat.toFixed(4)}, ${maxLng.toFixed(4)}`;
+  elements.boundsInfo.textContent = `${minLat.toFixed(4)}, ${minLng.toFixed(4)} → ${maxLat.toFixed(4)}, ${maxLng.toFixed(4)}`;
 
   if (!state.gpsHomeBounds) {
     state.gpsHomeBounds = L.latLngBounds(allLatLngs);
@@ -1599,65 +1776,161 @@ function resetTrackerMapView() {
   });
 }
 
-function openGpsPopup(point) {
-  if (!point || !elements.gpsPopupDialog || !elements.gpsPopupMap) return;
-
-  if (elements.gpsPopupTitle) {
-    elements.gpsPopupTitle.textContent = point.truckId || point.deviceId || 'Punto GPS';
-  }
-  if (elements.gpsPopupMeta) {
-    elements.gpsPopupMeta.textContent = `${formatDate(point.receivedAt)} · ${formatLocation(point)} · ${signalLabel(point.signal)}`;
-  }
-
-  if (!window.L) {
-    elements.gpsPopupMap.innerHTML = '<div class="mini-item"><strong>Mapa no disponible</strong><small>No se ha podido cargar Leaflet/OpenStreetMap.</small></div>';
-  } else {
-    const lat = getGpsLat(point);
-    const lng = getGpsLng(point);
-
-    if (!state.gpsPopupMapInstance) {
-      state.gpsPopupMapInstance = L.map(elements.gpsPopupMap, {
-        zoomControl: true,
-        scrollWheelZoom: true
-      }).setView([lat, lng], 16);
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap'
-      }).addTo(state.gpsPopupMapInstance);
-    } else {
-      state.gpsPopupMapInstance.setView([lat, lng], 16);
-    }
-
-    if (state.gpsPopupMarker) {
-      state.gpsPopupMarker.remove();
-    }
-
-    const popupClass = point.signal === 'bascula_subida'
-      ? 'gps-event-marker gps-event-marker-up'
-      : point.signal === 'bascula_bajada'
-        ? 'gps-event-marker gps-event-marker-down'
-        : 'gps-truck-marker';
-
-    state.gpsPopupMarker = L.marker([lat, lng], {
-      icon: L.divIcon({
-        className: '',
-        html: `<span class="${popupClass}"></span>`,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
-      })
-    }).addTo(state.gpsPopupMapInstance);
-
-    window.requestAnimationFrame(() => {
-      state.gpsPopupMapInstance?.invalidateSize();
-      state.gpsPopupMapInstance?.setView([lat, lng], 16);
-    });
-  }
-
+function showGpsPopupDialog() {
   if (typeof elements.gpsPopupDialog.showModal === 'function') {
-    elements.gpsPopupDialog.showModal();
+    if (!elements.gpsPopupDialog.open) elements.gpsPopupDialog.showModal();
   } else {
     elements.gpsPopupDialog.setAttribute('open', '');
+  }
+}
+
+function ensureGpsPopupMap(center = [40.4168, -3.7038], zoom = 6) {
+  if (!window.L || !elements.gpsPopupMap) return null;
+  if (!state.gpsPopupMapInstance) {
+    state.gpsPopupMapInstance = L.map(elements.gpsPopupMap, {
+      zoomControl: true,
+      scrollWheelZoom: true,
+      preferCanvas: true
+    }).setView(center, zoom);
+    state.gpsPopupTileLayer = addBudisaTiles(state.gpsPopupMapInstance);
+    L.control.scale({ imperial: false, position: 'bottomright' }).addTo(state.gpsPopupMapInstance);
+  }
+  return state.gpsPopupMapInstance;
+}
+
+function clearGpsPopupLayers() {
+  state.gpsPopupLayers.forEach((layer) => layer.remove());
+  state.gpsPopupLayers = [];
+  state.gpsPopupMarker = null;
+}
+
+function openGpsPopup(point) {
+  if (!point || !elements.gpsPopupDialog || !elements.gpsPopupMap) return;
+  const lat = getGpsLat(point);
+  const lng = getGpsLng(point);
+  if (lat === null || lng === null) return;
+
+  const imei = getTrackerIdentity(point);
+  elements.gpsPopupTitle.textContent = imei ? `IMEI ${imei}` : 'Punto GPS';
+  elements.gpsPopupMeta.textContent = `${formatPointDate(point)} · ${formatLocation(point)} · ${signalLabel(point.signal)}`;
+  elements.gpsPopupStats.innerHTML = `
+    <div><span>Velocidad</span><strong>${Math.round(Number(point.gps?.speed ?? point.speed ?? 0))} km/h</strong></div>
+    <div><span>Rumbo</span><strong>${Math.round(Number(point.gps?.heading ?? 0))}°</strong></div>
+    <div><span>Origen</span><strong>${escapeHtml(locationSourceLabel(point))}</strong></div>
+  `;
+  showGpsPopupDialog();
+
+  const map = ensureGpsPopupMap([lat, lng], 16);
+  if (!map) {
+    elements.gpsPopupMap.innerHTML = '<div class="tracker-days-empty"><strong>Mapa no disponible</strong><p>No se ha podido cargar Leaflet/OpenStreetMap.</p></div>';
+    return;
+  }
+
+  clearGpsPopupLayers();
+  const popupClass = point.signal === 'bascula_subida'
+    ? 'gps-event-marker gps-event-marker-up'
+    : point.signal === 'bascula_bajada'
+      ? 'gps-event-marker gps-event-marker-down'
+      : 'gps-truck-marker';
+  const marker = L.marker([lat, lng], {
+    icon: L.divIcon({
+      className: '',
+      html: `<span class="${popupClass}"></span>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    })
+  }).addTo(map);
+  state.gpsPopupLayers.push(marker);
+
+  window.requestAnimationFrame(() => {
+    map.invalidateSize();
+    map.setView([lat, lng], 16);
+  });
+}
+
+function drawPopupRoute(points, day) {
+  const groups = buildTrackerGroups(points.filter((point) => getGpsLat(point) !== null && getGpsLng(point) !== null));
+  const allPoints = groups.flatMap((group) => group.points);
+  const routeSummary = calculateRouteSummary(allPoints);
+  elements.gpsPopupTitle.textContent = `IMEI ${day.imei} · ${formatRouteDay(day.date)}`;
+  elements.gpsPopupMeta.textContent = allPoints.length
+    ? `${formatClock(getPointTimestamp(allPoints[0]))}—${formatClock(getPointTimestamp(allPoints[allPoints.length - 1]))} · recorrido completo`
+    : 'No hay posiciones válidas para esta jornada';
+  elements.gpsPopupStats.innerHTML = `
+    <div><span>Distancia</span><strong>${escapeHtml(formatDistance(routeSummary.distanceMeters))}</strong></div>
+    <div><span>Duración</span><strong>${escapeHtml(formatDuration(routeSummary.durationMs))}</strong></div>
+    <div><span>Puntos</span><strong>${routeSummary.pointCount}</strong></div>
+    <div><span>Máxima</span><strong>${Math.round(routeSummary.maxSpeedKph)} km/h</strong></div>
+  `;
+
+  const map = ensureGpsPopupMap();
+  if (!map) return;
+  clearGpsPopupLayers();
+  if (!allPoints.length) {
+    window.requestAnimationFrame(() => {
+      map.invalidateSize();
+      map.setView([40.4168, -3.7038], 6);
+    });
+    return;
+  }
+  const allLatLngs = [];
+
+  groups.forEach((group, groupIndex) => {
+    const color = getTrackerPointColor(groupIndex);
+    const latLngs = group.points.map((point) => [getGpsLat(point), getGpsLng(point)]);
+    allLatLngs.push(...latLngs);
+    const casing = L.polyline(latLngs, {
+      color: '#07131f',
+      weight: 10,
+      opacity: 0.72,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(map);
+    const route = L.polyline(latLngs, {
+      color,
+      weight: 5,
+      opacity: 1,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(map);
+    state.gpsPopupLayers.push(casing, route);
+
+    const endpoints = [group.points[0], group.points[group.points.length - 1]];
+    endpoints.forEach((point, index) => {
+      const marker = L.marker([getGpsLat(point), getGpsLng(point)], {
+        icon: L.divIcon({
+          className: '',
+          html: `<span class="route-endpoint route-endpoint-${index === 0 ? 'start' : 'finish'}" style="--marker-color: ${color}">${index === 0 ? 'A' : 'B'}</span>`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 15]
+        })
+      }).bindPopup(`<div class="gps-popup"><strong>${index === 0 ? 'Inicio' : 'Fin de ruta'}</strong><div>${escapeHtml(formatPointDate(point))}</div><div>${escapeHtml(formatLocation(point))}</div></div>`).addTo(map);
+      state.gpsPopupLayers.push(marker);
+    });
+  });
+
+  window.requestAnimationFrame(() => {
+    map.invalidateSize();
+    map.fitBounds(L.latLngBounds(allLatLngs), { padding: [36, 36], maxZoom: 17 });
+  });
+}
+
+async function openRouteDay(day) {
+  if (!day?.date || !day?.imei) return;
+  elements.gpsPopupTitle.textContent = `IMEI ${day.imei} · ${formatRouteDay(day.date)}`;
+  elements.gpsPopupMeta.textContent = 'Cargando recorrido…';
+  elements.gpsPopupStats.innerHTML = '<div class="route-dialog-loading"><span></span>Consultando posiciones</div>';
+  showGpsPopupDialog();
+
+  try {
+    const { from, to } = buildDayRange(day.date);
+    const points = await requestJson(
+      `/api/tracker?imei=${encodeURIComponent(day.imei)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=10000`
+    );
+    drawPopupRoute(points || [], day);
+  } catch (error) {
+    elements.gpsPopupMeta.textContent = 'No se ha podido cargar el recorrido';
+    elements.gpsPopupStats.innerHTML = `<div class="tracker-days-empty"><strong>Error de conexión</strong><p>${escapeHtml(error.message)}</p></div>`;
   }
 }
 
@@ -1707,11 +1980,13 @@ function exportCsv() {
 
 async function refresh() {
   try {
-    const [summary, events, devices, trackerPoints] = await Promise.all([
+    const [summary, events, devices, trackerPoints, trackerDays, gatewayStatus] = await Promise.all([
       requestJson('/api/summary'),
       requestJson('/api/events/search?limit=1000'),
       requestJson('/api/devices').catch(() => []),
-      requestJson('/api/tracker?limit=5000').catch(() => [])
+      requestJson('/api/tracker?limit=5000').catch(() => []),
+      requestJson('/api/tracker/days?limit=45').catch(() => []),
+      requestJson('/api/tracker/status').catch(() => null)
     ]);
     const trackerLookup = buildTrackerLookup(trackerPoints || []);
     const mergedEvents = (events || []).map((event) => mergeTrackerLocation(event, trackerLookup));
@@ -1722,8 +1997,14 @@ async function refresh() {
     state.historyEvents = state.allEvents.filter((event) => event.signal !== 'control_heartbeat' && event.signal !== 'gps');
     state.heartbeatEvents = state.allEvents.filter((event) => event.signal === 'control_heartbeat');
     state.devices = devices || [];
+    state.trackerDays = trackerDays || [];
+    state.latestTrackerPoints = trackerPoints || [];
+    state.gatewayStatus = gatewayStatus;
     state.latestEvent = mergedLatestEvent || state.historyEvents[0] || null;
-    state.trackerDeviceId = state.latestEvent?.truckId || state.latestEvent?.deviceId || state.devices[0]?.deviceId || state.trackerDeviceId;
+    renderTrackerDeviceSelector();
+    if (state.trackerDeviceId) {
+      localStorage.setItem(STORAGE_KEYS.trackerDevice, state.trackerDeviceId);
+    }
 
     elements.apiStatus.textContent = 'Conectado';
     renderSummary();
@@ -1732,8 +2013,9 @@ async function refresh() {
     syncTrackerDateControls();
 
     const { selectedDate, from, to } = getTrackerRequestRange();
+    const trackerFilter = state.trackerDeviceId ? `&imei=${encodeURIComponent(state.trackerDeviceId)}` : '';
     const trackerPointsForDay = await requestJson(
-      `/api/tracker?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=5000`
+      `/api/tracker?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=5000${trackerFilter}`
     );
     state.trackerDate = selectedDate;
     saveTrackerDate();
@@ -1802,6 +2084,12 @@ function setupListeners() {
     saveTrackerFollowToday();
     refresh();
   });
+  elements.trackerDeviceSelect?.addEventListener('change', () => {
+    state.trackerDeviceId = elements.trackerDeviceSelect.value;
+    localStorage.setItem(STORAGE_KEYS.trackerDevice, state.trackerDeviceId);
+    state.gpsHomeBounds = null;
+    refresh();
+  });
   elements.trackerTodayBtn?.addEventListener('click', () => {
     state.trackerFollowToday = true;
     state.trackerDate = getTodayIsoDate();
@@ -1812,6 +2100,14 @@ function setupListeners() {
     refresh();
   });
   elements.trackerHomeBtn?.addEventListener('click', resetTrackerMapView);
+  elements.routeDaysList?.addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-route-date]');
+    if (!button) return;
+    const day = state.trackerDays.find((item) => (
+      item.date === button.dataset.routeDate && item.imei === button.dataset.imei
+    ));
+    if (day) openRouteDay(day);
+  });
 
   elements.sensorSelect?.addEventListener('change', () => {
     if (elements.sensorSelect.value) {

@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-25T13:30:42.7778641+02:00",
+  "title": "Design System: Budisa Telemetría",
+  "extensions": {
+    "colorMeta": {
+      "night-canvas": {
+        "role": "neutral",
+        "displayName": "Lienzo medianoche",
+        "canonical": "#0b1020",
+        "tonalRamp": ["#070a13", "#0b1020", "#141b30", "#26304a", "#46536e", "#71809b", "#aeb8c9", "#edf1f7"]
+      },
+      "night-surface": {
+        "role": "neutral",
+        "displayName": "Grafito de panel",
+        "canonical": "#182338",
+        "tonalRamp": ["#09101b", "#111a2b", "#182338", "#2a3a53", "#4b5c76", "#74839a", "#b2bbc8", "#eef1f5"]
+      },
+      "night-text": {
+        "role": "neutral",
+        "displayName": "Blanco frío",
+        "canonical": "#eef4ff",
+        "tonalRamp": ["#16191f", "#2d333d", "#4c5665", "#6f7c8e", "#98a5b7", "#bdc8d7", "#dce4ef", "#eef4ff"]
+      },
+      "night-muted": {
+        "role": "neutral",
+        "displayName": "Gris azulado",
+        "canonical": "#93a3c1",
+        "tonalRamp": ["#111722", "#263042", "#3e4d63", "#5a6b83", "#74869f", "#93a3c1", "#bec8d9", "#edf0f6"]
+      },
+      "day-canvas": {
+        "role": "neutral",
+        "displayName": "Lienzo niebla",
+        "canonical": "#eef2f8",
+        "tonalRamp": ["#171a20", "#303641", "#535d6c", "#7c8798", "#aab3c0", "#d0d7e0", "#e6eaf0", "#eef2f8"]
+      },
+      "day-surface": {
+        "role": "neutral",
+        "displayName": "Superficie blanca",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#171717", "#363636", "#5c5c5c", "#858585", "#adadad", "#d1d1d1", "#eeeeee", "#ffffff"]
+      },
+      "day-text": {
+        "role": "neutral",
+        "displayName": "Tinta técnica",
+        "canonical": "#122033",
+        "tonalRamp": ["#08101b", "#122033", "#283a50", "#465a70", "#697c91", "#93a2b2", "#c1cad3", "#edf1f4"]
+      },
+      "day-muted": {
+        "role": "neutral",
+        "displayName": "Pizarra media",
+        "canonical": "#5d6a80",
+        "tonalRamp": ["#10151d", "#252e3b", "#414c5c", "#5d6a80", "#7e8b9e", "#a5afbd", "#ccd2da", "#f0f2f5"]
+      },
+      "gnss-mint": {
+        "role": "primary",
+        "displayName": "Menta GNSS",
+        "canonical": "#61d8b9",
+        "tonalRamp": ["#08251f", "#0d4438", "#176753", "#268b70", "#3db093", "#61d8b9", "#a2ead7", "#e2f9f2"]
+      },
+      "route-teal": {
+        "role": "primary",
+        "displayName": "Turquesa de ruta",
+        "canonical": "#2dd4bf",
+        "tonalRamp": ["#052521", "#07483f", "#0b6c5f", "#119280", "#1ab8a3", "#2dd4bf", "#91e9dc", "#ddf9f4"]
+      },
+      "budisa-blue": {
+        "role": "secondary",
+        "displayName": "Azul Budisa",
+        "canonical": "#6ea8ff",
+        "tonalRamp": ["#0b1c36", "#163664", "#285596", "#3e75c7", "#5592ed", "#6ea8ff", "#abcaff", "#e5efff"]
+      },
+      "route-blue": {
+        "role": "secondary",
+        "displayName": "Azul de destino",
+        "canonical": "#4f8cff",
+        "tonalRamp": ["#091b39", "#123468", "#204f9d", "#326bd0", "#4f8cff", "#7eacff", "#b4ceff", "#e7efff"]
+      },
+      "event-amber": {
+        "role": "tertiary",
+        "displayName": "Ámbar de evento",
+        "canonical": "#f4b942",
+        "tonalRamp": ["#2a1c03", "#503607", "#78520d", "#a27118", "#cb9228", "#f4b942", "#f9d887", "#fdf1d5"]
+      },
+      "alert-coral": {
+        "role": "tertiary",
+        "displayName": "Coral de alerta",
+        "canonical": "#ff6c7a",
+        "tonalRamp": ["#350a10", "#64151f", "#942532", "#c43b49", "#ec5564", "#ff6c7a", "#ffa8b0", "#ffe2e5"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Marca", "purpose": "Logotipo tipográfico lateral." },
+      "headline": { "displayName": "Título operativo", "purpose": "Títulos de vista y diálogo." },
+      "body": { "displayName": "Lectura", "purpose": "Instrucciones y metadatos." },
+      "label": { "displayName": "Etiqueta técnica", "purpose": "Nombres de métricas compactas." }
+    },
+    "shadows": [
+      { "name": "ambient-panel", "value": "0 18px 46px rgba(3, 8, 16, 0.24)", "purpose": "Consola y paneles principales." },
+      { "name": "floating-control", "value": "0 10px 26px rgba(3, 8, 14, 0.3)", "purpose": "Controles colocados sobre el mapa." },
+      { "name": "modal-focus", "value": "0 28px 80px rgba(2, 7, 13, 0.46)", "purpose": "Diálogo de recorrido diario." }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "180ms ease", "purpose": "Hover y selección de filas de ruta." },
+      { "name": "status-pulse", "value": "2.4s ease-out infinite", "purpose": "Solo estados GNSS activos; se elimina con reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "nav-top", "value": "1180px" },
+      { "name": "tracker-stack", "value": "1080px" },
+      { "name": "mobile", "value": "700px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Acción de mapa",
+      "kind": "button",
+      "refersTo": "map-action",
+      "description": "Acción compacta que flota sobre la cartografía.",
+      "html": "<button class=\"ds-map-action\">Encuadrar ruta</button>",
+      "css": ".ds-map-action { padding: 10px 12px; border: 1px solid rgba(156,180,205,.16); border-radius: 9px; background: #152231; color: #edf6ff; font: 500 14px Inter,Segoe UI,system-ui,sans-serif; cursor: pointer; transition: background 180ms ease,border-color 180ms ease; } .ds-map-action:hover { border-color: rgba(45,212,191,.48); background: #192a3a; } .ds-map-action:focus-visible { outline: 2px solid #61d8b9; outline-offset: 2px; }"
+    },
+    {
+      "name": "Navegación activa",
+      "kind": "nav",
+      "refersTo": "nav-default",
+      "description": "Acceso de sección con icono técnico y estado activo.",
+      "html": "<button class=\"ds-nav-active\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z\"/></svg><span>Tracker GPS</span></button>",
+      "css": ".ds-nav-active { display: inline-flex; align-items: center; gap: 10px; padding: 14px 16px; border: 1px solid rgba(97,216,185,.36); border-radius: 14px; background: #182338; color: #eef4ff; font: 500 15px Inter,Segoe UI,system-ui,sans-serif; cursor: pointer; } .ds-nav-active svg { width: 20px; height: 20px; fill: #b57bff; } .ds-nav-active:hover { transform: translateY(-1px); } .ds-nav-active:focus-visible { outline: 2px solid #61d8b9; outline-offset: 2px; }"
+    },
+    {
+      "name": "Estado transmitiendo",
+      "kind": "chip",
+      "description": "Indicador semántico de conexión reciente.",
+      "html": "<span class=\"ds-status\"><i></i>Transmitiendo</span>",
+      "css": ".ds-status { display: inline-flex; align-items: center; gap: 7px; color: #f4b942; font: 700 12px Inter,Segoe UI,system-ui,sans-serif; } .ds-status i { width: 9px; height: 9px; border-radius: 50%; background: #2dd4bf; box-shadow: 0 4px 14px rgba(45,212,191,.44); }"
+    },
+    {
+      "name": "Fila de registro IMEI",
+      "kind": "card",
+      "refersTo": "tracker-registry-row",
+      "description": "Estado y acción administrativa de un dispositivo identificado exclusivamente por IMEI.",
+      "html": "<article class=\"ds-device-row\"><strong>862129089568731</strong><span class=\"ds-device-status\">Activo</span><time>25/8/26, 13:54</time><button>Deshabilitar</button></article>",
+      "css": ".ds-device-row { display: grid; grid-template-columns: 1.4fr .7fr 1fr auto; align-items: center; gap: 12px; padding: 14px; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; background: #141f32; color: #eef4ff; font: 500 13px Inter,Segoe UI,system-ui,sans-serif; } .ds-device-row strong,.ds-device-row time { font-variant-numeric: tabular-nums; } .ds-device-status { width: max-content; padding: 5px 9px; border-radius: 999px; background: rgba(97,216,185,.12); color: #61d8b9; font-weight: 700; } .ds-device-row button { padding: 8px 10px; border: 1px solid rgba(255,255,255,.1); border-radius: 9px; background: transparent; color: #eef4ff; }"
+    },
+    {
+      "name": "Selector operativo",
+      "kind": "input",
+      "description": "Campo oscuro para escoger el IMEI o la jornada.",
+      "html": "<label class=\"ds-field\"><span>IMEI</span><select><option>862129089568731</option></select></label>",
+      "css": ".ds-field { display: grid; gap: 8px; width: 260px; color: #93a3c1; font: 700 11px Inter,Segoe UI,system-ui,sans-serif; letter-spacing: .06em; } .ds-field select { width: 100%; padding: 11px 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 9px; background: #0b1020; color: #eef4ff; font: 500 15px Inter,Segoe UI,system-ui,sans-serif; } .ds-field select:focus-visible { outline: 2px solid #61d8b9; outline-offset: 2px; }"
+    },
+    {
+      "name": "Jornada de ruta",
+      "kind": "card",
+      "refersTo": "route-card",
+      "description": "Resumen seleccionable de un recorrido histórico.",
+      "html": "<button class=\"ds-route-day\"><span><strong>lun, 24 ago 2026</strong><small>10:00—12:16</small></span><b>8.4 km</b><em>18 puntos · máx. 80 km/h</em></button>",
+      "css": ".ds-route-day { display: grid; grid-template-columns: 1fr auto; gap: 5px 12px; width: 300px; padding: 14px; border: 1px solid rgba(45,212,191,.25); border-radius: 12px; background: rgba(45,212,191,.08); color: #eef4ff; text-align: left; font-family: Inter,Segoe UI,system-ui,sans-serif; cursor: pointer; } .ds-route-day span { display: grid; gap: 4px; } .ds-route-day small,.ds-route-day em { color: #93a3c1; font-size: 11px; font-style: normal; } .ds-route-day b { color: #2dd4bf; font-size: 13px; } .ds-route-day em { grid-column: 1 / -1; } .ds-route-day:hover { background: rgba(45,212,191,.13); transform: translateY(-1px); } .ds-route-day:focus-visible { outline: 2px solid #61d8b9; outline-offset: 2px; }"
+    },
+    {
+      "name": "Métrica telemática",
+      "kind": "custom",
+      "description": "Par etiqueta-valor optimizado para lectura de un vistazo.",
+      "html": "<div class=\"ds-metric\"><span>VELOCIDAD</span><strong>27</strong><small>km/h</small></div>",
+      "css": ".ds-metric { display: grid; gap: 3px; padding: 14px 16px; border-left: 1px solid rgba(255,255,255,.08); background: #182338; color: #eef4ff; font-family: Inter,Segoe UI,system-ui,sans-serif; } .ds-metric span { color: #6ea8ff; font-size: 11px; font-weight: 700; letter-spacing: .06em; } .ds-metric strong { font-size: 21px; font-variant-numeric: tabular-nums; } .ds-metric small { color: #93a3c1; font-size: 11px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Centro de Control de Ruta",
+    "overview": "Budisa se expresa como una consola telemática sobria: mucha información útil, jerarquía inmediata y un mapa que se siente parte de la herramienta, no un contenido incrustado. El mundo visual combina grafito operativo, azul de marca, turquesa GNSS y pequeñas señales ámbar para que la lectura crítica destaque sin convertir cada bloque en una tarjeta protagonista.\n\nLa densidad es deliberadamente media-alta en escritorio y se reorganiza en una secuencia vertical clara en móvil. La apariencia debe seguir siendo digital y cartográfica; no se imitan metales, salpicaderos físicos ni materiales inexistentes.",
+    "keyCharacteristics": [
+      "Mapa dominante con cartografía desaturada y rutas de alto contraste.",
+      "Superficies oscuras por capas, bordes finos y profundidad ambiental contenida.",
+      "Métricas compactas con números claros y etiquetas técnicas en mayúsculas.",
+      "Registro de IMEIs con estados semánticos, trazabilidad temporal y acciones explícitas.",
+      "Turquesa reservado para posición, transmisión y recorrido; azul para marca y navegación.",
+      "Tema claro equivalente, sin perder la jerarquía operacional."
+    ],
+    "rules": [
+      { "name": "The Signal Economy Rule", "body": "Los acentos saturados comunican estado, ruta o acción; no decoran superficies completas.", "section": "colors" },
+      { "name": "The Numeric Glance Rule", "body": "Velocidad, hora, distancia y recuentos usan cifras tabulares y mayor contraste que sus etiquetas.", "section": "typography" },
+      { "name": "The Map-First Rule", "body": "En una superficie de localización, la ruta y su contexto espacial conservan más área que cualquier lista o resumen asociado.", "section": "layout" },
+      { "name": "The Layer Before Shadow Rule", "body": "Primero se diferencia una superficie por tono y borde; la sombra solo refuerza una elevación real.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do mantener el mapa como foco cuando la tarea principal sea comprender movimiento o ubicación.",
+      "Do mostrar la hora real del GPS cuando exista y separar claramente datos actuales de rutas históricas.",
+      "Do usar divisores, alineación y cifras tabulares para hacer escaneables las métricas densas.",
+      "Do conservar atribución visible cuando se utilice cartografía de OpenStreetMap."
+    ],
+    "donts": [
+      "Don't usar turquesa, ámbar o coral como decoración sin significado operativo.",
+      "Don't presentar datos sintéticos como si provinieran de un dispositivo real.",
+      "Don't convertir cada métrica en una tarjeta flotante independiente.",
+      "Don't imitar Google Maps ni un salpicadero físico; la herramienta debe conservar identidad cartográfica propia de Budisa."
+    ]
+  }
+}

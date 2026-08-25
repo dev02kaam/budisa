@@ -73,6 +73,11 @@ function createTelemetrySchema() {
         type: String,
         default: null
       },
+      positionAt: {
+        type: Date,
+        default: null,
+        index: true
+      },
       locationSource: {
         type: String,
         enum: ['gps', 'red'],

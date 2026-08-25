@@ -2,7 +2,10 @@ const mongoose = require('mongoose');
 const { createTelemetrySchema } = require('./telemetry.schema');
 
 const TrackerPointSchema = createTelemetrySchema();
+TrackerPointSchema.path('truckId').required(false);
 TrackerPointSchema.index({ deviceId: 1, receivedAt: -1 });
 TrackerPointSchema.index({ truckId: 1, receivedAt: -1 });
+TrackerPointSchema.index({ deviceId: 1, positionAt: -1 });
+TrackerPointSchema.index({ truckId: 1, positionAt: -1 });
 
 module.exports = mongoose.model('TrackerPoint', TrackerPointSchema, 'tracker_points');
