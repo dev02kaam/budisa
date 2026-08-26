@@ -2,15 +2,16 @@ const { connectDb, disconnectDb } = require('../src/config/db');
 const { registerTracker } = require('../src/services/tracker-gateway.service');
 
 async function run() {
-  const [imei] = process.argv.slice(2);
+  const [imei, ...nameParts] = process.argv.slice(2);
+  const name = nameParts.join(' ').trim();
 
-  if (!imei) {
-    throw new Error('Uso: npm run tracker:register -- <imei>');
+  if (!imei || !name) {
+    throw new Error('Uso: npm run tracker:register -- <imei> <nombre>');
   }
 
   await connectDb();
-  const tracker = await registerTracker({ imei });
-  console.log(`Tracker registrado por IMEI: ${tracker.imei}`);
+  const tracker = await registerTracker({ imei, name });
+  console.log(`Dispositivo registrado: ${tracker.name} (${tracker.imei})`);
 }
 
 run()

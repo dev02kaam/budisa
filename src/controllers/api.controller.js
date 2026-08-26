@@ -1,63 +1,20 @@
-const eventService = require('../services/event.service');
-const { normalizePayload } = require('../utils/telemetry');
+const fleetService = require('../services/fleet.service');
+const {
+  getGatewayStatus,
+  listTrackers,
+  registerTracker,
+  updateTracker
+} = require('../services/tracker-gateway.service');
 
-async function ingestTelemetry(req, res, next) {
-  try {
-    const payload = normalizePayload(req.body);
-    const event = await eventService.createEvent(payload);
-    res.status(201).json({ ok: true, event });
-  } catch (error) {
-    next(error);
-  }
+function boundedLimit(value, fallback, maximum) {
+  const number = Number(value || fallback);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(Math.max(Math.trunc(number), 1), maximum);
 }
 
-async function summary(req, res, next) {
+async function fleet(req, res, next) {
   try {
-    const data = await eventService.getSummary();
-    res.json({ ok: true, data });
-  } catch (error) {
-    next(error);
-  }
-}
-
-async function latest(req, res, next) {
-  try {
-    const limit = Math.min(Number(req.query.limit || 20), 500);
-    const events = await eventService.getLatestEvents(limit);
-    res.json({ ok: true, data: events });
-  } catch (error) {
-    next(error);
-  }
-}
-
-async function search(req, res, next) {
-  try {
-    const limit = Math.min(Number(req.query.limit || 200), 1000);
-    const events = await eventService.getEvents(
-      {
-        deviceId: req.query.deviceId,
-        truckId: req.query.truckId,
-        signal: req.query.signal,
-        gpioState: req.query.gpioState,
-        hasGps: String(req.query.hasGps || '').toLowerCase() === 'true',
-        from: req.query.from,
-        to: req.query.to,
-        q: req.query.q
-      },
-      limit
-    );
-    res.json({ ok: true, data: events });
-  } catch (error) {
-    next(error);
-  }
-}
-
-async function trail(req, res, next) {
-  try {
-    const limit = Math.min(Number(req.query.limit || 100), 500);
-    const deviceId = String(req.params.deviceId || 'raspberry-1');
-    const points = await eventService.getTrail(deviceId, limit);
-    res.json({ ok: true, data: points });
+    res.json({ ok: true, data: await fleetService.getFleet() });
   } catch (error) {
     next(error);
   }
@@ -65,15 +22,13 @@ async function trail(req, res, next) {
 
 async function tracker(req, res, next) {
   try {
-    const limit = Math.min(Number(req.query.limit || 5000), 10000);
-    const points = await eventService.getTrackerPoints(
+    const points = await fleetService.getTrackerPoints(
       {
-        deviceId: req.query.imei || req.query.deviceId,
-        truckId: req.query.truckId,
+        imei: req.query.imei,
         from: req.query.from,
         to: req.query.to
       },
-      limit
+      boundedLimit(req.query.limit, 10000, 20000)
     );
     res.json({ ok: true, data: points });
   } catch (error) {
@@ -83,13 +38,13 @@ async function tracker(req, res, next) {
 
 async function trackerDays(req, res, next) {
   try {
-    const limit = Math.min(Math.max(Number(req.query.limit || 30), 1), 90);
-    const days = await eventService.getTrackerDays(
+    const days = await fleetService.getTrackerDays(
       {
-        deviceId: req.query.imei || req.query.deviceId,
-        truckId: req.query.truckId
+        imei: req.query.imei,
+        from: req.query.from,
+        to: req.query.to
       },
-      limit
+      boundedLimit(req.query.limit, 500, 1000)
     );
     res.json({ ok: true, data: days });
   } catch (error) {
@@ -99,9 +54,7 @@ async function trackerDays(req, res, next) {
 
 async function trackerStatus(req, res, next) {
   try {
-    const { getGatewayStatus } = require('../services/tracker-gateway.service');
-    const status = await getGatewayStatus();
-    res.json({ ok: true, data: status });
+    res.json({ ok: true, data: await getGatewayStatus() });
   } catch (error) {
     next(error);
   }
@@ -109,9 +62,7 @@ async function trackerStatus(req, res, next) {
 
 async function trackers(req, res, next) {
   try {
-    const { listTrackers } = require('../services/tracker-gateway.service');
-    const list = await listTrackers();
-    res.json({ ok: true, data: list });
+    res.json({ ok: true, data: await listTrackers() });
   } catch (error) {
     next(error);
   }
@@ -119,11 +70,18 @@ async function trackers(req, res, next) {
 
 async function registerTrackerDevice(req, res, next) {
   try {
-    const { registerTracker } = require('../services/tracker-gateway.service');
-    const tracker = await registerTracker({ imei: String(req.body?.imei || '').trim() });
+    const trackerDevice = await registerTracker({
+      imei: String(req.body?.imei || '').trim(),
+      name: req.body?.name
+    });
     res.status(201).json({
       ok: true,
-      data: { imei: tracker.imei, status: 'approved', enabled: true }
+      data: {
+        imei: trackerDevice.imei,
+        name: trackerDevice.name,
+        status: trackerDevice.approvalStatus,
+        enabled: trackerDevice.enabled
+      }
     });
   } catch (error) {
     next(error);
@@ -132,19 +90,27 @@ async function registerTrackerDevice(req, res, next) {
 
 async function updateTrackerDevice(req, res, next) {
   try {
-    if (typeof req.body?.enabled !== 'boolean') {
-      const error = new Error('enabled debe ser true o false');
+    const hasEnabled = typeof req.body?.enabled === 'boolean';
+    const hasName = typeof req.body?.name === 'string';
+    if (!hasEnabled && !hasName) {
+      const error = new Error('Indica un nombre o un estado para guardar');
+      error.code = 'EMPTY_TRACKER_UPDATE';
       error.statusCode = 400;
       throw error;
     }
-    const { setTrackerApproval } = require('../services/tracker-gateway.service');
-    const tracker = await setTrackerApproval(req.params.imei, req.body.enabled);
+
+    const trackerDevice = await updateTracker({
+      imei: req.params.imei,
+      ...(hasEnabled ? { enabled: req.body.enabled } : {}),
+      ...(hasName ? { name: req.body.name } : {})
+    });
     res.json({
       ok: true,
       data: {
-        imei: tracker.imei,
-        status: tracker.approvalStatus,
-        enabled: tracker.enabled
+        imei: trackerDevice.imei,
+        name: trackerDevice.name,
+        status: trackerDevice.approvalStatus,
+        enabled: trackerDevice.enabled
       }
     });
   } catch (error) {
@@ -152,47 +118,12 @@ async function updateTrackerDevice(req, res, next) {
   }
 }
 
-async function devices(req, res, next) {
-  try {
-    const list = await eventService.getDevices();
-    res.json({ ok: true, data: list });
-  } catch (error) {
-    next(error);
-  }
-}
-
-async function insights(req, res, next) {
-  try {
-    const data = await eventService.getInsights();
-    res.json({ ok: true, data });
-  } catch (error) {
-    next(error);
-  }
-}
-
-async function heartbeats(req, res, next) {
-  try {
-    const limit = Math.min(Number(req.query.limit || 200), 1000);
-    const events = await eventService.getHeartbeats(limit);
-    res.json({ ok: true, data: events });
-  } catch (error) {
-    next(error);
-  }
-}
-
 module.exports = {
-  ingestTelemetry,
-  summary,
-  latest,
-  search,
-  trail,
+  fleet,
+  registerTrackerDevice,
   tracker,
   trackerDays,
   trackerStatus,
   trackers,
-  registerTrackerDevice,
-  updateTrackerDevice,
-  devices,
-  insights,
-  heartbeats
+  updateTrackerDevice
 };

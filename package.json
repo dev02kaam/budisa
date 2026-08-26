@@ -1,13 +1,13 @@
 {
-  "name": "budisa-sensor-platform",
+  "name": "budisa-fleet-platform",
   "version": "1.0.0",
-  "description": "Plataforma modular para sensor de iman con GPS, dashboard e historico",
+  "description": "Consola de flota Teltonika con seguimiento GPS e historico diario",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test/telemetry.test.js && node test/teltonika.test.js && node test/tracker-gateway.test.js",
+    "test": "node test/teltonika.test.js && node test/tracker-gateway.test.js",
     "tracker:register": "node scripts/register-tracker.js"
   },
   "dependencies": {

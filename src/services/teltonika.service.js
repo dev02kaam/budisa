@@ -1,6 +1,5 @@
 const crypto = require('crypto');
-const eventService = require('./event.service');
-const { normalizePayload } = require('../utils/telemetry');
+const { ingestGatewayPacket } = require('./tracker-gateway.service');
 
 function isUsableGps(gps) {
   return Number.isFinite(gps.latitude)
@@ -12,60 +11,58 @@ function isUsableGps(gps) {
     && !(gps.latitude === 0 && gps.longitude === 0);
 }
 
-function eventIdFor(imei, record) {
-  const digest = crypto
-    .createHash('sha256')
-    .update(imei)
-    .update(record.raw)
-    .digest('hex')
-    .slice(0, 32);
-
-  return `teltonika-${imei}-${digest}`;
+function digestFor(...values) {
+  const hash = crypto.createHash('sha256');
+  values.forEach((value) => hash.update(Buffer.isBuffer(value) ? value : String(value)));
+  return hash.digest('hex');
 }
 
-async function saveRecord(imei, codecId, record) {
-  if (!isUsableGps(record.gps)) {
-    return;
-  }
-
-  const payload = normalizePayload({
-    eventId: eventIdFor(imei, record),
-    truckId: imei,
-    event: 'gps',
-    lat: record.gps.latitude,
-    lon: record.gps.longitude,
-    altitude: record.gps.altitude,
-    speed: record.gps.speed,
-    heading: record.gps.angle,
-    gpsTimestamp: record.timestamp.toISOString(),
-    locationSource: 'gps',
-    locationProvider: 'Teltonika FTC880',
-    source: 'teltonika_ftc880',
-    metadata: {
+function buildDirectPayload({ imei, codecId, records }) {
+  const receivedAt = new Date();
+  return {
+    schemaVersion: 1,
+    source: 'teltonika-gateway',
+    device: {
       imei,
-      codecId,
+      manufacturer: 'Teltonika',
+      model: 'FTC880'
+    },
+    packet: {
+      packetId: digestFor(imei, codecId, ...records.map((record) => record.raw)),
+      codec: codecId === 0x8e ? '8E' : String(codecId),
+      recordCount: records.length,
+      receivedAt: receivedAt.toISOString()
+    },
+    records: records.map((record, index) => ({
+      eventId: digestFor(imei, record.raw),
+      index,
+      timestampMs: record.timestamp.getTime(),
       priority: record.priority,
-      satellites: record.gps.satellites,
-      eventIoId: record.eventIoId,
-      io: record.io
-    }
-  });
+      gps: {
+        latitude: record.gps.latitude,
+        longitude: record.gps.longitude,
+        altitudeM: record.gps.altitude,
+        angleDeg: record.gps.angle,
+        satellites: record.gps.satellites,
+        speedKph: record.gps.speed,
+        valid: isUsableGps(record.gps)
+      },
+      io: {
+        eventId: record.eventIoId,
+        raw: record.io,
+        known: {}
+      }
+    }))
+  };
+}
 
+async function ingestPacket(packet) {
   try {
-    await eventService.createEvent(payload);
+    return await ingestGatewayPacket(buildDirectPayload(packet));
   } catch (error) {
-    if (error?.code !== 11000) {
-      throw error;
-    }
+    if (error?.code === 'UNKNOWN_DEVICE') return 0;
+    throw error;
   }
 }
 
-async function ingestPacket({ imei, codecId, records }) {
-  for (const record of records) {
-    await saveRecord(imei, codecId, record);
-  }
-
-  return records.length;
-}
-
-module.exports = { ingestPacket, isUsableGps };
+module.exports = { buildDirectPayload, ingestPacket, isUsableGps };

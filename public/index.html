@@ -3,398 +3,234 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Budisa | Telemetría GPS</title>
+  <title>Budisa | Control de flota</title>
   <link rel="icon" href="/assets/logoyfavicon.png" type="image/png" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body data-theme="night">
   <!--
-    THESIS: La posición real manda; se evita el dashboard de tarjetas iguales y el mapa se convierte en la superficie principal de trabajo.
-    OWN-WORLD: Grafito operativo, azul Budisa y turquesa GNSS; controles compactos, líneas cartográficas atenuadas y recorridos de alto contraste.
-    STORY: El operador confirma conexión, identifica el vehículo, entiende su estado actual y abre cualquier jornada para reconstruir el trayecto.
-    FIRST VIEWPORT: Barra de dispositivo y telemetría sobre un mapa dominante; selector temporal encima, resumen de ruta debajo e histórico diario a la derecha.
-    FORM: Consola telemática operativa inspirada por la referencia aportada, adaptada a Budisa y a la cartografía OpenStreetMap.
+    THESIS: Cada vehículo se entiende por su nombre operativo y se verifica por su IMEI; se evita mezclar telemetría antigua con el trabajo diario de flota.
+    OWN-WORLD: Consola Budisa de grafito y azul profundo, rutas turquesa, estados compactos y superficies cartográficas desaturadas.
+    STORY: El trabajador ve la flota ahora, reconstruye jornadas, comprueba conexión/fix y administra nombres e IMEIs sin salir de la aplicación.
+    FIRST VIEWPORT: Resumen horizontal, mapa vivo dominante y lista de vehículos con velocidad, fix y última transmisión.
+    FORM [seed: centro-control-ruta]: Centro de control de flota en cuatro tareas claras: Dashboard, Histórico, Estado y Dispositivos.
     FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
   -->
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-mark brand-logo-wrap">
-          <img src="/assets/logoyfavicon.png" alt="Budisa" class="brand-logo" />
-        </div>
-        <div>
-          <h1 class="brand-title">
-            <span class="brand-letter brand-letter-outer">B</span>
-            <span class="brand-letter brand-letter-outer">U</span>
-            <span class="brand-letter brand-letter-mid">D</span>
-            <span class="brand-letter brand-letter-mid">I</span>
-            <span class="brand-letter brand-letter-outer">S</span>
-            <span class="brand-letter brand-letter-outer">A</span>
-          </h1>
-        </div>
-      </div>
+      <a class="brand" href="#dashboard" data-view-link="dashboard" aria-label="Ir al Dashboard">
+        <span class="brand-logo-wrap"><img src="/assets/logoyfavicon.png" alt="" /></span>
+        <span class="brand-word">BUDISA</span>
+      </a>
 
-      <nav class="nav" id="navMenu">
-        <button class="nav-item active" data-view="dashboard">
-          <span class="nav-icon nav-icon-truck" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M4 7.5A1.5 1.5 0 0 1 5.5 6h8.1v6.2H18l2.3 2.4V17H19a2.8 2.8 0 1 0-5.6 0H10a2.8 2.8 0 1 0-5.6 0H3V9.5A2 2 0 0 1 5 7.5Zm.5 1.5v4.5h2.8V9H4.5Zm3.8 0v4.5H13V9H8.3Zm5.7 0v3.1h2.8l-1.5-1.6A1 1 0 0 0 14 11.7Zm-5.9 6.8a1.1 1.1 0 1 1-2.2 0 1.1 1.1 0 0 1 2.2 0Zm9 0a1.1 1.1 0 1 1-2.2 0 1.1 1.1 0 0 1 2.2 0Z"/>
-            </svg>
-          </span>
+      <nav class="nav" id="navMenu" aria-label="Navegación principal">
+        <button class="nav-item active" type="button" data-view="dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12.5 12 4l9 8.5v7a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5v-7Zm4 2.5v3h4v-3H7Zm7-5v8h3v-8h-3Z"/></svg>
           <span>Dashboard</span>
         </button>
-        <button class="nav-item" data-view="historico">
-          <span class="nav-icon nav-icon-sensor" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M7 5.5A2.5 2.5 0 0 1 9.5 3h5A2.5 2.5 0 0 1 17 5.5v13A2.5 2.5 0 0 1 14.5 21h-5A2.5 2.5 0 0 1 7 18.5v-13Zm2.5-.5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5h-5Z"/>
-              <path d="M10 9h4v2h-4zm0 4h4v2h-4z"/>
-              <path d="M5 8H3v8h2zm16 0h-2v8h2z" opacity=".85"/>
-            </svg>
-          </span>
+        <button class="nav-item" type="button" data-view="historico">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 8.5 6H18a6.7 6.7 0 1 1-2.1-2.8L13 9h8V1l-3.2 3.2A9 9 0 0 0 12 3Zm-1 5v5.3l4.2 2.4 1-1.7-3.2-1.9V8h-2Z"/></svg>
           <span>Histórico</span>
         </button>
-        <button class="nav-item" data-view="estado">
-          <span class="nav-icon nav-icon-life" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M3 12h3.2l1.6-4.5c.3-.8 1.4-.8 1.7 0L12 17l1.9-5.2c.3-.8 1.4-.8 1.7 0l1.1 3.2H21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M12 3c4.9 0 9 4 9 9s-4.1 9-9 9-9-4-9-9 4.1-9 9-9Z" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".45"/>
-            </svg>
-          </span>
+        <button class="nav-item" type="button" data-view="estado">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h3.2l1.6-4.5c.3-.8 1.4-.8 1.7 0L12 17l1.9-5.2c.3-.8 1.4-.8 1.7 0l1.1 3.2H21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3a9 9 0 1 1-9 9 9 9 0 0 1 9-9Z" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".4"/></svg>
           <span>Estado</span>
         </button>
-        <button class="nav-item" data-view="tracker">
-          <span class="nav-icon nav-icon-gps" aria-hidden="true">
-            <svg viewBox="0 0 24 24" focusable="false">
-              <path d="M12 2a7 7 0 0 0-7 7c0 4.7 7 13 7 13s7-8.3 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/>
-            </svg>
-          </span>
-          <span>Tracker GPS</span>
+        <button class="nav-item" type="button" data-view="dispositivos">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3Zm0 3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8Zm2 2h4v2h-4v-2Zm0 4h4v2h-4v-2Zm0 4h4v2h-4v-2Z"/></svg>
+          <span>Dispositivos</span>
         </button>
       </nav>
 
-      <section class="sidebar-card">
-        <h3>Funciones extra</h3>
-        <ul>
-          <li>Recepción FTC880 mediante gateway TCP</li>
-          <li>Asociación segura por IMEI registrado</li>
-          <li>Estado GNSS y recorrido de la jornada</li>
-          <li>Histórico diario con mapa completo</li>
-          <li>Base preparada para FTC887 y EYE Sensor</li>
-        </ul>
+      <section class="gateway-card" aria-label="Receptor Teltonika">
+        <div><span class="gateway-pulse"></span><strong>Receptor FTC880</strong></div>
+        <p>crossover.proxy.rlwy.net</p>
+        <span>TCP · puerto 22945</span>
       </section>
     </aside>
 
     <main class="main">
       <header class="topbar">
         <div class="topbar-copy">
-          <span class="page-icon" id="pageIcon" aria-hidden="true"></span>
-          <h2 id="pageTitle">Panel de control</h2>
+          <h1 id="pageTitle">Flota en directo</h1>
+          <p id="pageSubtitle">Situación actual de todos los vehículos conectados.</p>
         </div>
         <div class="topbar-actions">
-          <label class="theme-switch" for="themeToggleInput">
+          <label class="theme-switch" for="themeToggleInput" title="Cambiar tema">
             <input type="checkbox" id="themeToggleInput" />
-            <span class="theme-switch-ui">
-              <span class="theme-icon theme-icon-sun">☀</span>
-              <span class="theme-track">
-                <span class="theme-thumb"></span>
-              </span>
-              <span class="theme-icon theme-icon-moon">☾</span>
-            </span>
+            <span aria-hidden="true">☀</span>
+            <i><b></b></i>
+            <span aria-hidden="true">☾</span>
           </label>
-          <div class="status-pill" id="apiStatus">Conectando...</div>
+          <div class="api-status" id="apiStatus"><i></i><span>Conectando</span></div>
         </div>
       </header>
 
       <section class="view view-active" id="view-dashboard" data-view="dashboard">
-        <section class="cards" id="summaryCards">
-          <article class="card">
-            <span>Eventos totales</span>
-            <strong id="totalEvents">0</strong>
-          </article>
-          <article class="card">
-            <span>Dispositivos</span>
-            <strong id="deviceCount">0</strong>
-          </article>
-          <article class="card">
-            <span>Última señal</span>
-            <strong id="latestSignal">-</strong>
-          </article>
-          <article class="card">
-            <span>Última ubicación</span>
-            <strong id="latestCoords">-</strong>
-          </article>
+        <section class="overview-strip" aria-label="Resumen de flota">
+          <div><span>Dispositivos</span><strong id="metricDevices">0</strong><small>registrados</small></div>
+          <div><span>Transmitiendo</span><strong id="metricOnline">0</strong><small>últimos 15 min</small></div>
+          <div><span>Con fix GPS</span><strong id="metricFix">0</strong><small>posición disponible</small></div>
+          <div><span>Distancia hoy</span><strong id="metricDistance">0 km</strong><small>flota completa</small></div>
         </section>
 
-        <section class="grid grid-dashboard">
-          <article class="panel panel-wide">
-            <div class="panel-header">
-              <h3>Resumen de señales</h3>
-              <p>Gráfico rápido de la actividad</p>
-            </div>
-            <canvas id="signalChart" width="900" height="240"></canvas>
-          </article>
-
-          <article class="panel">
-            <div class="panel-header">
+        <section class="dashboard-grid">
+          <article class="fleet-map-panel">
+            <header class="section-header">
               <div>
-                <h3>Estado del sensor</h3>
-                <p>Selecciona uno o varios sensores para comparar su estado</p>
+                <h2>Mapa operativo</h2>
+                <p>Última posición aceptada de cada dispositivo.</p>
               </div>
-              <div class="sensor-picker">
-                <select id="sensorSelect" aria-label="Seleccionar sensor"></select>
-                <button class="mini-action sensor-picker-add" id="addSensorBtn" type="button" title="Añadir sensor">+</button>
-              </div>
-            </div>
-            <div class="sensor-chip-row" id="sensorChips"></div>
-            <div class="sensor-stack" id="liveBox"></div>
-          </article>
-        </section>
-      </section>
-
-      <section class="view" id="view-historico" data-view="historico">
-        <section class="grid grid-history-controls">
-          <article class="panel panel-wide">
-            <div class="panel-header">
-              <h3>Filtros apilables</h3>
-              <p>Combina, quita y reordena criterios</p>
-            </div>
-
-            <div id="filterBuilder" class="filter-builder"></div>
-
-            <div class="filter-actions">
-              <button class="primary-btn" id="addFilterBtn" type="button">+ Añadir filtro</button>
-              <button class="ghost-btn" id="clearFiltersBtn" type="button">Limpiar filtros</button>
-              <button class="ghost-btn" id="resetColumnsBtn" type="button">Reset columnas</button>
-              <button class="ghost-btn" id="exportCsvBtn" type="button">Exportar CSV</button>
-            </div>
-
-            <div class="filter-chip-wrap" id="filterChips"></div>
-          </article>
-        </section>
-
-        <section class="panel panel-table">
-          <div class="panel-header">
-            <h3>Histórico completo</h3>
-            <p id="historyCount">0 eventos visibles</p>
-          </div>
-          <div class="table-wrap">
-            <table class="history-table">
-              <thead id="historyHead"></thead>
-              <tbody id="eventsTable"></tbody>
-            </table>
-          </div>
-          <div class="table-pagination" id="historyPagination">
-            <button class="ghost-btn" type="button" id="historyPrevPage">Anterior</button>
-            <span id="historyPageInfo">Página 1</span>
-            <button class="ghost-btn" type="button" id="historyNextPage">Siguiente</button>
-          </div>
-        </section>
-      </section>
-
-      <section class="view" id="view-estado" data-view="estado">
-        <section class="tracker-registry panel" aria-labelledby="trackerRegistryTitle">
-          <header class="tracker-registry-header">
-            <div>
-              <h3 id="trackerRegistryTitle">Dispositivos Teltonika</h3>
-              <p>Aprueba los IMEIs que pueden enviar posiciones a Budisa.</p>
-            </div>
-            <div class="tracker-registry-summary" id="trackerRegistrySummary" aria-label="Resumen de dispositivos">
-              <span><strong>0</strong> activos</span>
-              <span><strong>0</strong> pendientes</span>
-            </div>
-          </header>
-
-          <form class="tracker-admin-access" id="trackerAdminAccess">
-            <input type="text" name="username" value="tracker-admin" autocomplete="username" hidden aria-hidden="true" tabindex="-1" />
-            <label for="trackerAdminTokenInput">
-              <span>Clave de administración</span>
-              <input id="trackerAdminTokenInput" name="password" type="password" autocomplete="current-password" placeholder="Introduce la clave configurada en Render" />
-            </label>
-            <button class="primary-btn" id="trackerAdminUnlockBtn" type="submit">Acceder</button>
-            <p>La clave se conserva solo durante esta pestaña y nunca se añade a la URL.</p>
-          </form>
-
-          <div class="tracker-registry-controls" id="trackerRegistryControls" hidden>
-            <form class="tracker-register-form" id="trackerRegisterForm">
-              <label for="trackerRegisterImei">
-                <span>Registrar un IMEI antes de conectarlo</span>
-                <input id="trackerRegisterImei" name="imei" inputmode="numeric" autocomplete="off" maxlength="15" pattern="[0-9]{15}" placeholder="862129089568731" required />
-              </label>
-              <button class="primary-btn" id="trackerRegisterBtn" type="submit">Registrar IMEI</button>
-            </form>
-            <button class="ghost-btn tracker-admin-lock" id="trackerAdminLockBtn" type="button">Cerrar acceso</button>
-          </div>
-
-          <div class="tracker-registry-feedback" id="trackerRegistryFeedback" role="status" aria-live="polite"></div>
-          <div class="tracker-registry-list" id="trackerRegistryList">
-            <div class="tracker-registry-empty">
-              <strong>Administración bloqueada</strong>
-              <p>Introduce la clave para consultar, aprobar o deshabilitar IMEIs.</p>
-            </div>
-          </div>
-        </section>
-
-        <section class="grid grid-history-controls">
-          <article class="panel panel-wide">
-            <div class="panel-header">
-              <h3>Heartbeats de servicio</h3>
-              <p>Solo eventos de control para revisar conectividad</p>
-            </div>
-
-            <div id="heartbeatFilterBuilder" class="filter-builder"></div>
-
-            <div class="filter-actions">
-              <button class="primary-btn" id="heartbeatAddFilterBtn" type="button">+ Añadir filtro</button>
-              <button class="ghost-btn" id="heartbeatClearFiltersBtn" type="button">Limpiar filtros</button>
-              <button class="ghost-btn" id="heartbeatResetColumnsBtn" type="button">Reset columnas</button>
-              <button class="ghost-btn" id="heartbeatExportCsvBtn" type="button">Exportar CSV</button>
-            </div>
-
-            <div class="filter-chip-wrap" id="heartbeatFilterChips"></div>
-          </article>
-        </section>
-
-        <section class="panel panel-table">
-          <div class="panel-header">
-            <h3>Línea de vida</h3>
-            <p id="heartbeatCount">0 heartbeats visibles</p>
-          </div>
-          <div class="table-wrap">
-            <table class="history-table">
-              <thead id="heartbeatHead"></thead>
-              <tbody id="heartbeatEventsTable"></tbody>
-            </table>
-          </div>
-          <div class="table-pagination" id="heartbeatPagination">
-            <button class="ghost-btn" type="button" id="heartbeatPrevPage">Anterior</button>
-            <span id="heartbeatPageInfo">Página 1</span>
-            <button class="ghost-btn" type="button" id="heartbeatNextPage">Siguiente</button>
-          </div>
-        </section>
-      </section>
-
-      <section class="view" id="view-tracker" data-view="tracker">
-        <section class="tracker-workspace">
-          <article class="tracker-console">
-            <header class="tracker-device-bar">
-              <div class="tracker-device-identity">
-                <span class="tracker-device-symbol" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><path d="M3 6.5h11.5v9H3v-9Zm12.8 3H19l2 2.4v3.6h-1.2a2.6 2.6 0 0 0-5.1 0h-1V8.2h2.1v1.3ZM8 18.7a2.2 2.2 0 1 1 0-4.4 2.2 2.2 0 0 1 0 4.4Zm9.3 0a2.2 2.2 0 1 1 0-4.4 2.2 2.2 0 0 1 0 4.4Z"/></svg>
-                </span>
-                <div>
-                  <div class="tracker-status-line">
-                    <span class="tracker-connection-dot" id="trackerConnectionDot"></span>
-                    <span id="trackerConnectionLabel">Esperando dispositivo</span>
-                  </div>
-                  <strong id="trackerDeviceName">Esperando IMEI</strong>
-                  <span id="trackerDeviceMeta">FTC880 · sin telemetría</span>
-                </div>
-              </div>
-
-              <label class="tracker-device-select-wrap" for="trackerDeviceSelect">
-                <span>IMEI</span>
-                <select id="trackerDeviceSelect" aria-label="Seleccionar IMEI"></select>
-              </label>
-
-              <div class="tracker-live-metrics" aria-label="Telemetría actual">
-                <div><span>Velocidad</span><strong id="trackerSpeed">--</strong><small>km/h</small></div>
-                <div><span>Satélites</span><strong id="trackerSatellites">--</strong><small>GNSS</small></div>
-                <div><span>Contacto</span><strong id="trackerIgnition">--</strong><small>ignición</small></div>
-                <div><span>Último dato</span><strong id="trackerLastSeen">--</strong><small id="trackerLastSeenDate">sin enlace</small></div>
-              </div>
+              <button class="quiet-button" id="fitFleetBtn" type="button">Ver toda la flota</button>
             </header>
-
-            <div class="tracker-map-stage">
-              <div id="gpsMap" role="img" aria-label="Mapa GPS de Budisa con cartografía OpenStreetMap"></div>
-              <div class="tracker-map-toolbar">
-                <label for="trackerDateInput">
-                  <span>Jornada</span>
-                  <input id="trackerDateInput" type="date" aria-label="Seleccionar día del tracker" />
-                </label>
-                <button class="tracker-map-action" id="trackerTodayBtn" type="button">Hoy</button>
-                <button class="tracker-map-action" id="trackerHomeBtn" type="button">Encuadrar ruta</button>
+            <div class="fleet-map-stage">
+              <div id="fleetMap" aria-label="Mapa de posiciones actuales de la flota"></div>
+              <div class="map-legend" aria-label="Leyenda">
+                <span><i class="legend-dot is-online"></i>En línea</span>
+                <span><i class="legend-dot is-offline"></i>Sin transmisión</span>
               </div>
-              <div class="tracker-map-legend" aria-label="Leyenda del mapa">
-                <span><i class="legend-line"></i>Recorrido</span>
-                <span><i class="legend-current"></i>Posición</span>
-                <span><i class="legend-event"></i>Evento</span>
-              </div>
-              <div class="tracker-map-empty" id="trackerMapEmpty" hidden>
-                <span class="tracker-map-empty-pulse"></span>
-                <strong>Esperando la primera posición GPS</strong>
-                <p>El mapa se activará cuando Budisa acepte un registro del FTC880.</p>
+              <div class="map-empty" id="fleetMapEmpty">
+                <span class="map-empty-symbol">⌖</span>
+                <strong>Esperando posiciones reales</strong>
+                <p>Los vehículos aparecerán cuando Budisa reciba su primer punto GPS.</p>
               </div>
             </div>
-
-            <footer class="tracker-route-strip">
-              <div><span>Distancia</span><strong id="trackerDistance">0 km</strong></div>
-              <div><span>Duración</span><strong id="trackerDuration">--</strong></div>
-              <div><span>Puntos recibidos</span><strong id="trailCount">0</strong></div>
-              <div><span>Velocidad máxima</span><strong id="trackerMaxSpeed">0 km/h</strong></div>
-              <p id="boundsInfo">Sin recorrido para la jornada seleccionada</p>
+            <footer class="vehicle-inspector" id="vehicleInspector">
+              <div>
+                <span>Vehículo seleccionado</span>
+                <strong>Selecciona un dispositivo de la lista</strong>
+              </div>
+              <dl>
+                <div><dt>Velocidad</dt><dd>—</dd></div>
+                <div><dt>Satélites</dt><dd>—</dd></div>
+                <div><dt>Contacto</dt><dd>—</dd></div>
+                <div><dt>Último dato</dt><dd>—</dd></div>
+              </dl>
             </footer>
           </article>
 
-          <aside class="tracker-days-panel">
-            <div class="tracker-days-header">
+          <aside class="fleet-now-panel">
+            <header class="section-header">
               <div>
-                <h3>Histórico de rutas</h3>
-                <p>Selecciona una jornada para abrir el recorrido completo.</p>
+                <h2>Flota ahora</h2>
+                <p id="fleetNowCount">0 vehículos</p>
               </div>
-              <span class="tracker-days-count" id="trackerDaysCount">0 días</span>
-            </div>
-            <div class="tracker-days-list" id="routeDaysList"></div>
-            <div class="tracker-points-timeline" id="trailList" hidden></div>
+            </header>
+            <label class="search-field" for="dashboardSearch">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.8-4.8a7.5 7.5 0 1 0-1.4 1.4l4.8 4.8 1.4-1.4ZM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z"/></svg>
+              <input id="dashboardSearch" type="search" placeholder="Buscar nombre o IMEI" autocomplete="off" />
+            </label>
+            <div class="fleet-now-list" id="fleetNowList"></div>
           </aside>
         </section>
       </section>
 
+      <section class="view" id="view-historico" data-view="historico">
+        <section class="history-filter-panel">
+          <div class="section-header">
+            <div>
+              <h2>Recorridos por jornada</h2>
+              <p>Filtra por vehículo o fecha y abre la ruta completa.</p>
+            </div>
+            <button class="quiet-button" id="clearHistoryFilters" type="button">Limpiar filtros</button>
+          </div>
+          <form class="history-filters" id="historyFilters">
+            <label><span>Buscar</span><input id="historySearch" type="search" placeholder="Nombre o IMEI" autocomplete="off" /></label>
+            <label><span>Dispositivo</span><select id="historyDevice"><option value="">Todos los vehículos</option></select></label>
+            <label><span>Desde</span><input id="historyFrom" type="date" /></label>
+            <label><span>Hasta</span><input id="historyTo" type="date" /></label>
+          </form>
+          <div class="history-totals" id="historyTotals">
+            <span><strong>0</strong> jornadas</span>
+            <span><strong>0 km</strong> recorridos</span>
+            <span><strong>0</strong> puntos GPS</span>
+          </div>
+        </section>
+
+        <section class="route-ledger">
+          <header class="route-ledger-head" aria-hidden="true">
+            <span>Vehículo</span><span>Jornada</span><span>Horario</span><span>Distancia</span><span>Vel. máxima</span><span>Puntos</span><span></span>
+          </header>
+          <div id="historyRouteList"></div>
+        </section>
+      </section>
+
+      <section class="view" id="view-estado" data-view="estado">
+        <section class="status-overview">
+          <header class="section-header">
+            <div>
+              <h2>Estado de dispositivos</h2>
+              <p>Autorización, enlace y calidad GPS de un vistazo.</p>
+            </div>
+            <div class="status-legend">
+              <span><i class="legend-dot is-online"></i>En línea</span>
+              <span><i class="legend-dot is-waiting"></i>Esperando</span>
+              <span><i class="legend-dot is-offline"></i>Sin enlace</span>
+            </div>
+          </header>
+          <div class="status-table" id="statusTable"></div>
+        </section>
+      </section>
+
+      <section class="view" id="view-dispositivos" data-view="dispositivos">
+        <section class="devices-admin-panel">
+          <header class="devices-admin-header">
+            <div>
+              <h2>Dispositivos</h2>
+              <p>Asocia cada IMEI a un nombre reconocible para el equipo.</p>
+            </div>
+            <div class="device-admin-summary" id="deviceAdminSummary"><span><strong>0</strong> activos</span><span><strong>0</strong> pendientes</span></div>
+          </header>
+
+          <form class="admin-unlock" id="adminUnlockForm">
+            <input type="text" name="username" value="tracker-admin" autocomplete="username" hidden aria-hidden="true" tabindex="-1" />
+            <label for="adminTokenInput"><span>Clave de administración</span><input id="adminTokenInput" name="password" type="password" autocomplete="current-password" placeholder="Introduce TRACKER_ADMIN_TOKEN" /></label>
+            <button class="primary-button" type="submit">Acceder</button>
+            <p>La clave permanece únicamente en esta pestaña.</p>
+          </form>
+
+          <div class="devices-admin-workspace" id="devicesAdminWorkspace" hidden>
+            <form class="device-create-form" id="deviceCreateForm">
+              <label for="deviceNameInput"><span>Nombre del vehículo</span><input id="deviceNameInput" name="name" maxlength="80" placeholder="Ej. Hormigonera 01" autocomplete="off" required /></label>
+              <label for="deviceImeiInput"><span>IMEI Teltonika</span><input id="deviceImeiInput" name="imei" inputmode="numeric" maxlength="15" pattern="[0-9]{15}" placeholder="15 dígitos" autocomplete="off" required /></label>
+              <button class="primary-button" id="deviceCreateButton" type="submit">Añadir dispositivo</button>
+            </form>
+            <div class="admin-session-actions">
+              <label class="search-field" for="deviceAdminSearch">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.8-4.8a7.5 7.5 0 1 0-1.4 1.4l4.8 4.8 1.4-1.4ZM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z"/></svg>
+                <input id="deviceAdminSearch" type="search" placeholder="Buscar dispositivo" autocomplete="off" />
+              </label>
+              <button class="quiet-button" id="adminLockButton" type="button">Cerrar acceso</button>
+            </div>
+          </div>
+
+          <div class="admin-feedback" id="adminFeedback" role="status" aria-live="polite"></div>
+          <div class="device-admin-list" id="deviceAdminList">
+            <div class="empty-state"><strong>Administración bloqueada</strong><p>Introduce la clave para añadir, nombrar o deshabilitar dispositivos.</p></div>
+          </div>
+        </section>
+      </section>
+
       <footer class="app-footer">
-        <span>&copy; Budisa. Todos los derechos reservados.</span>
-        <span class="app-footer-separator">|</span>
-        <span>
-          Powered by
-          <a href="https://kaam.es" target="_blank" rel="noreferrer noopener">Kaam Innovación y Tecnología</a>
-        </span>
+        <span>© Budisa</span><span>Control de flota Teltonika</span><a href="https://kaam.es" target="_blank" rel="noreferrer noopener">Kaam Innovación y Tecnología</a>
       </footer>
     </main>
   </div>
 
-  <dialog class="column-dialog" id="columnDialog">
-    <form method="dialog" class="column-dialog-card" id="columnDialogForm">
-      <div class="column-dialog-header">
-        <div>
-          <h3>Columnas ocultas</h3>
-          <p>Selecciona una o varias columnas para volver a mostrarlas.</p>
-        </div>
-        <button class="column-dialog-close" type="button" id="columnDialogClose" aria-label="Cerrar">&times;</button>
-      </div>
-      <div class="column-dialog-list" id="columnDialogList"></div>
-      <div class="column-dialog-actions">
-        <button class="ghost-btn" type="button" id="columnDialogCancel">Cancelar</button>
-        <button class="primary-btn" type="button" id="columnDialogAdd" disabled>Añadir</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog class="gps-popup-dialog" id="gpsPopupDialog">
-    <form method="dialog" class="gps-popup-card">
-      <div class="route-dialog-header">
-        <div>
-          <h3 id="gpsPopupTitle">Recorrido GPS</h3>
-          <p id="gpsPopupMeta">Detalle de la jornada seleccionada</p>
-        </div>
-        <button class="column-dialog-close" type="button" id="gpsPopupClose" aria-label="Cerrar">&times;</button>
-      </div>
-      <div class="route-dialog-stats" id="gpsPopupStats"></div>
-      <div class="gps-popup-map" id="gpsPopupMap" aria-label="Mapa de punto GPS seleccionado"></div>
-    </form>
+  <dialog class="route-dialog" id="routeDialog">
+    <article>
+      <header class="route-dialog-header">
+        <div><h2 id="routeDialogTitle">Recorrido</h2><p id="routeDialogMeta">Detalle de jornada</p></div>
+        <button id="routeDialogClose" type="button" aria-label="Cerrar recorrido">×</button>
+      </header>
+      <div class="route-dialog-stats" id="routeDialogStats"></div>
+      <div class="route-dialog-map" id="routeDialogMap" aria-label="Mapa del recorrido diario"></div>
+    </article>
   </dialog>
 
   <script src="/js/api.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="/js/app.js"></script>
-  <script src="/js/estado.js"></script>
 </body>
 </html>
