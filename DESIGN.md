@@ -91,7 +91,7 @@ components:
 
 **Creative North Star: "Centro de Control de Ruta"**
 
-Budisa se expresa como una consola telemática sobria y compacta. La cartografía ocupa el centro de la experiencia, mientras que nombre operativo, IMEI, conexión y fix GPS se leen de un vistazo alrededor de ella. El mundo visual combina grafito azulado, azul de marca y señales turquesa; el ámbar y el coral solo aparecen cuando el estado exige atención.
+Budisa se expresa como una consola telemática sobria y compacta. La cartografía ocupa el centro de la experiencia, mientras que nombre operativo, matrícula, IMEI, conexión y fix GPS se leen de un vistazo alrededor de ella. El mundo visual combina grafito azulado, azul de marca y señales turquesa; el ámbar y el coral solo aparecen cuando el estado exige atención.
 
 La densidad es media-alta en escritorio y se convierte en una secuencia vertical clara en móvil. La interfaz permanece digital y cartográfica: no imita Google Maps, salpicaderos físicos, metal ni instrumental analógico.
 
@@ -99,7 +99,7 @@ La densidad es media-alta en escritorio y se convierte en una secuencia vertical
 
 - Mapa dominante con cartografía desaturada y recorridos de alto contraste.
 - Cuatro tareas estables: Dashboard, Histórico, Estado y Dispositivos.
-- Nombre operativo como lectura primaria e IMEI como verificación técnica.
+- Nombre y matrícula como lectura primaria e IMEI como verificación técnica.
 - Superficies tonales, bordes finos y profundidad ambiental contenida.
 - Tema oscuro principal y tema claro con la misma jerarquía semántica.
 
@@ -209,13 +209,13 @@ Los marcadores muestran nombre antes que IMEI y distinguen conexión reciente, d
 
 ### Filas de dispositivo
 
-Dashboard prioriza nombre, velocidad, fix y última recepción. Estado mantiene una lectura no editable. Dispositivos añade campo de nombre y acciones administrativas; pendiente usa ámbar, activo menta y deshabilitado un tono neutro.
+Dashboard prioriza nombre, matrícula, velocidad, fix y última recepción. Estado mantiene una lectura no editable. Dispositivos agrupa los campos de nombre y matrícula como identificación operativa; pendiente usa ámbar, activo menta y deshabilitado un tono neutro.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** mantener nombre e IMEI juntos siempre que el ancho lo permita.
+- **Do** mantener nombre, matrícula e IMEI juntos siempre que el ancho lo permita.
 - **Do** mostrar la hora real del GPS y separar claramente estado actual de rutas históricas.
 - **Do** usar divisores, alineación y cifras tabulares para escanear datos densos.
 - **Do** conservar visible la atribución de OpenStreetMap.

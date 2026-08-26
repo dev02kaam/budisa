@@ -15,6 +15,13 @@ const TrackerSchema = new mongoose.Schema(
       maxlength: 80,
       default: ''
     },
+    licensePlate: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      maxlength: 20,
+      default: ''
+    },
     enabled: {
       type: Boolean,
       default: false,

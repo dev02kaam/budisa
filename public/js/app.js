@@ -21,7 +21,7 @@ const VIEW_META = {
   },
   dispositivos: {
     title: 'Gestión de dispositivos',
-    subtitle: 'Nombres operativos asociados de forma segura a cada IMEI.'
+    subtitle: 'Nombre y matrícula asociados de forma segura a cada IMEI.'
   }
 };
 
@@ -97,6 +97,7 @@ const elements = {
   devicesAdminWorkspace: document.getElementById('devicesAdminWorkspace'),
   deviceCreateForm: document.getElementById('deviceCreateForm'),
   deviceNameInput: document.getElementById('deviceNameInput'),
+  deviceLicensePlateInput: document.getElementById('deviceLicensePlateInput'),
   deviceImeiInput: document.getElementById('deviceImeiInput'),
   deviceCreateButton: document.getElementById('deviceCreateButton'),
   deviceAdminSearch: document.getElementById('deviceAdminSearch'),
@@ -123,6 +124,20 @@ function escapeHtml(value) {
 
 function deviceName(device) {
   return String(device?.name || '').trim() || 'Sin nombre';
+}
+
+function deviceLicensePlate(device) {
+  return String(device?.licensePlate || '').trim().toUpperCase() || 'Sin matrícula';
+}
+
+function normalizeLicensePlate(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
+function matchesDeviceQuery(device, query) {
+  return device.imei.includes(query)
+    || deviceName(device).toLocaleLowerCase('es').includes(query)
+    || deviceLicensePlate(device).toLocaleLowerCase('es').includes(query);
 }
 
 function formatDateTime(value, empty = 'Sin datos') {
@@ -256,9 +271,7 @@ function renderMetrics() {
 function filteredDashboardFleet() {
   const query = elements.dashboardSearch.value.trim().toLocaleLowerCase('es');
   if (!query) return state.fleet;
-  return state.fleet.filter((device) => (
-    device.imei.includes(query) || deviceName(device).toLocaleLowerCase('es').includes(query)
-  ));
+  return state.fleet.filter((device) => matchesDeviceQuery(device, query));
 }
 
 function renderFleetList() {
@@ -267,7 +280,7 @@ function renderFleetList() {
 
   if (!devices.length) {
     elements.fleetNowList.innerHTML = `
-      <div class="empty-state"><strong>No hay coincidencias</strong><p>Prueba con otro nombre o con parte del IMEI.</p></div>
+      <div class="empty-state"><strong>No hay coincidencias</strong><p>Prueba con otro nombre, matrícula o parte del IMEI.</p></div>
     `;
     return;
   }
@@ -277,7 +290,7 @@ function renderFleetList() {
     const position = device.latestPosition;
     return `
       <button class="fleet-vehicle-row${state.selectedImei === device.imei ? ' is-selected' : ''}" type="button" data-select-imei="${escapeHtml(device.imei)}">
-        <span class="vehicle-row-title"><strong>${escapeHtml(deviceName(device))}</strong><small>IMEI ${escapeHtml(device.imei)}</small></span>
+        <span class="vehicle-row-title"><strong>${escapeHtml(deviceName(device))}</strong><small>${escapeHtml(deviceLicensePlate(device))} · IMEI ${escapeHtml(device.imei)}</small></span>
         <span class="vehicle-row-speed">${position ? `${Math.round(position.speedKph)} km/h` : '—'}</span>
         <span class="vehicle-row-meta">${statusBadge(connection)}<span>${device.gpsFix ? `${position?.satellites || 0} satélites` : 'Sin fix GPS'}</span><span>${formatRelative(device.lastSeenAt)}</span></span>
       </button>
@@ -297,7 +310,7 @@ function renderVehicleInspector() {
   const position = device.latestPosition;
   const ignition = position?.ignition === true ? 'Encendido' : position?.ignition === false ? 'Apagado' : '—';
   elements.vehicleInspector.innerHTML = `
-    <div><span>Vehículo seleccionado</span><strong>${escapeHtml(deviceName(device))} · ${escapeHtml(device.imei)}</strong></div>
+    <div><span>Vehículo seleccionado</span><strong>${escapeHtml(deviceName(device))} · ${escapeHtml(deviceLicensePlate(device))}</strong><small>IMEI ${escapeHtml(device.imei)}</small></div>
     <dl>
       <div><dt>Velocidad</dt><dd>${position ? `${Math.round(position.speedKph)} km/h` : '—'}</dd></div>
       <div><dt>Satélites</dt><dd>${position ? String(position.satellites || 0) : '—'}</dd></div>
@@ -361,7 +374,7 @@ function renderFleetMap() {
     const position = device.latestPosition;
     const marker = L.marker([position.latitude, position.longitude], { icon: vehicleMarkerIcon(device) })
       .addTo(state.fleetMap)
-      .bindPopup(`<strong class="map-popup-title">${escapeHtml(deviceName(device))}</strong><span class="map-popup-imei">IMEI ${escapeHtml(device.imei)}</span><br>${Math.round(position.speedKph)} km/h · ${escapeHtml(formatRelative(device.lastSeenAt))}`);
+      .bindPopup(`<strong class="map-popup-title">${escapeHtml(deviceName(device))}</strong><span class="map-popup-imei">${escapeHtml(deviceLicensePlate(device))} · IMEI ${escapeHtml(device.imei)}</span><br>${Math.round(position.speedKph)} km/h · ${escapeHtml(formatRelative(device.lastSeenAt))}`);
     marker.on('click', () => selectDevice(device.imei, { focusMap: false }));
     state.fleetMarkers.set(device.imei, marker);
   });
@@ -386,7 +399,7 @@ function renderHistoryDeviceOptions() {
   const options = state.fleet
     .slice()
     .sort((left, right) => deviceName(left).localeCompare(deviceName(right), 'es'))
-    .map((device) => `<option value="${escapeHtml(device.imei)}">${escapeHtml(deviceName(device))} · ${escapeHtml(device.imei)}</option>`)
+    .map((device) => `<option value="${escapeHtml(device.imei)}">${escapeHtml(deviceName(device))} · ${escapeHtml(deviceLicensePlate(device))} · ${escapeHtml(device.imei)}</option>`)
     .join('');
   elements.historyDevice.innerHTML = `<option value="">Todos los vehículos</option>${options}`;
   elements.historyDevice.value = state.fleet.some((device) => device.imei === selected) ? selected : '';
@@ -399,7 +412,11 @@ function filteredDays() {
   const to = elements.historyTo.value;
   return state.days.filter((day) => {
     const name = day.name || state.fleet.find((device) => device.imei === day.imei)?.name || '';
-    if (query && !day.imei.includes(query) && !name.toLocaleLowerCase('es').includes(query)) return false;
+    const licensePlate = day.licensePlate || state.fleet.find((device) => device.imei === day.imei)?.licensePlate || '';
+    if (query
+      && !day.imei.includes(query)
+      && !name.toLocaleLowerCase('es').includes(query)
+      && !licensePlate.toLocaleLowerCase('es').includes(query)) return false;
     if (imei && day.imei !== imei) return false;
     if (from && day.date < from) return false;
     if (to && day.date > to) return false;
@@ -424,9 +441,10 @@ function renderHistory() {
 
   elements.historyRouteList.innerHTML = days.map((day) => {
     const name = day.name || state.fleet.find((device) => device.imei === day.imei)?.name || '';
+    const licensePlate = day.licensePlate || state.fleet.find((device) => device.imei === day.imei)?.licensePlate || '';
     return `
       <article class="route-ledger-row">
-        <div class="route-vehicle" data-label="Vehículo"><strong>${escapeHtml(name || 'Sin nombre')}</strong><small>IMEI ${escapeHtml(day.imei)}</small></div>
+        <div class="route-vehicle" data-label="Vehículo"><strong>${escapeHtml(name || 'Sin nombre')}</strong><small>${escapeHtml(licensePlate || 'Sin matrícula')} · IMEI ${escapeHtml(day.imei)}</small></div>
         <time data-label="Jornada" datetime="${escapeHtml(day.date)}">${escapeHtml(formatLongDate(day.date))}</time>
         <span data-label="Horario">${formatTime(day.startAt)}–${formatTime(day.endAt)}</span>
         <span class="route-distance" data-label="Distancia">${formatDistance(day.distanceMeters)}</span>
@@ -460,7 +478,7 @@ function renderStatus() {
         : { label: 'Sin fix', className: 'is-no-fix' };
       return `
         <article class="status-device-row">
-          <div class="status-device-identity" data-label="Vehículo"><strong>${escapeHtml(deviceName(device))}</strong><span>${escapeHtml(device.imei)}</span></div>
+          <div class="status-device-identity" data-label="Vehículo"><strong>${escapeHtml(deviceName(device))}</strong><span>${escapeHtml(deviceLicensePlate(device))} · ${escapeHtml(device.imei)}</span></div>
           <span class="status-device-model" data-label="Modelo">${escapeHtml(`${device.manufacturer || 'Teltonika'} ${device.model || ''}`.trim())}</span>
           <div data-label="Autorización">${statusBadge(approval)}</div>
           <div data-label="Conexión">${statusBadge(connection)}</div>
@@ -519,9 +537,7 @@ function renderAdminSummary() {
 function filteredAdminTrackers() {
   const query = elements.deviceAdminSearch.value.trim().toLocaleLowerCase('es');
   if (!query) return state.adminTrackers;
-  return state.adminTrackers.filter((tracker) => (
-    tracker.imei.includes(query) || String(tracker.name || '').toLocaleLowerCase('es').includes(query)
-  ));
+  return state.adminTrackers.filter((tracker) => matchesDeviceQuery(tracker, query));
 }
 
 function renderAdminDevices() {
@@ -531,7 +547,7 @@ function renderAdminDevices() {
   renderAdminSummary();
 
   if (!unlocked) {
-    elements.deviceAdminList.innerHTML = `<div class="empty-state"><strong>Administración bloqueada</strong><p>Introduce la clave para añadir, nombrar o deshabilitar dispositivos.</p></div>`;
+    elements.deviceAdminList.innerHTML = `<div class="empty-state"><strong>Administración bloqueada</strong><p>Introduce la clave para identificar, añadir o deshabilitar dispositivos.</p></div>`;
     return;
   }
   if (state.adminLoading) {
@@ -546,7 +562,7 @@ function renderAdminDevices() {
   }
 
   elements.deviceAdminList.innerHTML = `
-    <div class="device-admin-head" aria-hidden="true"><span>Nombre operativo</span><span>IMEI</span><span>Estado</span><span>Actividad</span><span>Acciones</span></div>
+    <div class="device-admin-head" aria-hidden="true"><span>Identificación</span><span>IMEI</span><span>Estado</span><span>Actividad</span><span>Acciones</span></div>
     ${trackers.map((tracker) => {
       const presentation = approvalPresentation(tracker.status);
       const busy = state.adminBusyImei === tracker.imei;
@@ -554,7 +570,7 @@ function renderAdminDevices() {
       const actionLabel = tracker.status === 'pending' ? 'Aprobar' : tracker.status === 'approved' ? 'Deshabilitar' : 'Reactivar';
       return `
         <article class="device-admin-row" data-status="${escapeHtml(tracker.status)}" data-device-row="${escapeHtml(tracker.imei)}">
-          <label class="device-name-editor" data-label="Nombre operativo"><input aria-label="Nombre operativo de ${escapeHtml(tracker.imei)}" data-name-input="${escapeHtml(tracker.imei)}" maxlength="80" value="${escapeHtml(tracker.name || '')}" placeholder="Asigna un nombre" ${busy ? 'disabled' : ''} /><button class="row-action" type="button" data-device-action="save" data-imei="${escapeHtml(tracker.imei)}" ${busy ? 'disabled' : ''}>Guardar</button></label>
+          <div class="device-identity-editor" data-label="Identificación"><label><span>Nombre</span><input aria-label="Nombre operativo de ${escapeHtml(tracker.imei)}" data-name-input="${escapeHtml(tracker.imei)}" maxlength="80" value="${escapeHtml(tracker.name || '')}" placeholder="Asigna un nombre" ${busy ? 'disabled' : ''} /></label><label><span>Matrícula</span><input aria-label="Matrícula de ${escapeHtml(tracker.imei)}" data-license-plate-input="${escapeHtml(tracker.imei)}" maxlength="20" value="${escapeHtml(tracker.licensePlate || '')}" placeholder="1234 ABC" autocapitalize="characters" spellcheck="false" ${busy ? 'disabled' : ''} /></label><button class="row-action" type="button" data-device-action="save" data-imei="${escapeHtml(tracker.imei)}" ${busy ? 'disabled' : ''}>Guardar</button></div>
           <div class="device-imei" data-label="IMEI"><strong>${escapeHtml(tracker.imei)}</strong><small>${escapeHtml(`${tracker.manufacturer || 'Teltonika'} ${tracker.model || ''}`.trim())}</small></div>
           <div data-label="Estado">${statusBadge(presentation)}</div>
           <div class="device-admin-date" data-label="Actividad">${tracker.lastSeenAt ? `Dato: ${escapeHtml(formatRelative(tracker.lastSeenAt))}` : tracker.lastAttemptAt ? `Intento: ${escapeHtml(formatRelative(tracker.lastAttemptAt))}` : 'Sin actividad'}</div>
@@ -613,10 +629,16 @@ function lockAdmin() {
 async function createDevice(event) {
   event.preventDefault();
   const name = elements.deviceNameInput.value.trim();
+  const licensePlate = normalizeLicensePlate(elements.deviceLicensePlateInput.value);
   const imei = elements.deviceImeiInput.value.trim();
   if (!name) {
     setAdminFeedback('Escribe un nombre reconocible para el vehículo.', 'error');
     elements.deviceNameInput.focus();
+    return;
+  }
+  if (!licensePlate || !/^[A-Z0-9 -]{1,20}$/.test(licensePlate)) {
+    setAdminFeedback('Escribe una matrícula válida con letras, números, espacios o guiones.', 'error');
+    elements.deviceLicensePlateInput.focus();
     return;
   }
   if (!/^\d{15}$/.test(imei)) {
@@ -628,11 +650,11 @@ async function createDevice(event) {
   state.adminBusyImei = imei;
   elements.deviceCreateButton.disabled = true;
   elements.deviceCreateButton.textContent = 'Añadiendo…';
-  setAdminFeedback(`Añadiendo ${name}…`);
+  setAdminFeedback(`Añadiendo ${name} · ${licensePlate}…`);
   try {
-    await requestAdmin('/api/trackers', { method: 'POST', body: JSON.stringify({ imei, name }) });
+    await requestAdmin('/api/trackers', { method: 'POST', body: JSON.stringify({ imei, name, licensePlate }) });
     elements.deviceCreateForm.reset();
-    setAdminFeedback(`${name} añadido y habilitado.`, 'success');
+    setAdminFeedback(`${name} · ${licensePlate} añadido y habilitado.`, 'success');
     await loadAdminTrackers({ silent: true });
     await refreshPublicData({ silent: true });
   } catch (error) {
@@ -649,23 +671,34 @@ function nameInputFor(imei) {
   return elements.deviceAdminList.querySelector(`[data-name-input="${CSS.escape(imei)}"]`);
 }
 
+function licensePlateInputFor(imei) {
+  return elements.deviceAdminList.querySelector(`[data-license-plate-input="${CSS.escape(imei)}"]`);
+}
+
 async function handleDeviceAction(button) {
   const imei = button.dataset.imei;
   const action = button.dataset.deviceAction;
   const name = nameInputFor(imei)?.value.trim() || '';
+  const licensePlate = normalizeLicensePlate(licensePlateInputFor(imei)?.value);
   if (!imei || !action) return;
   if ((action === 'save' || action === 'approve' || action === 'reactivate') && !name) {
     setAdminFeedback('Asigna un nombre antes de guardar o habilitar el dispositivo.', 'error');
     nameInputFor(imei)?.focus();
     return;
   }
-  if (action === 'disable' && !window.confirm(`¿Deshabilitar ${name || imei}? Dejará de aceptar posiciones hasta que lo reactives.`)) return;
+  if ((action === 'save' || action === 'approve' || action === 'reactivate')
+    && (!licensePlate || !/^[A-Z0-9 -]{1,20}$/.test(licensePlate))) {
+    setAdminFeedback('Asigna una matrícula válida antes de guardar o habilitar el dispositivo.', 'error');
+    licensePlateInputFor(imei)?.focus();
+    return;
+  }
+  if (action === 'disable' && !window.confirm(`¿Deshabilitar ${name || imei}${licensePlate ? ` · ${licensePlate}` : ''}? Dejará de aceptar posiciones hasta que lo reactives.`)) return;
 
   const payload = action === 'save'
-    ? { name }
+    ? { name, licensePlate }
     : action === 'disable'
       ? { enabled: false }
-      : { enabled: true, name };
+      : { enabled: true, name, licensePlate };
   state.adminBusyImei = imei;
   renderAdminDevices();
   setAdminFeedback(`${action === 'disable' ? 'Deshabilitando' : 'Guardando'} ${name || imei}…`);
@@ -726,7 +759,8 @@ function drawRoute(points) {
 
 async function openRoute(day) {
   const name = day.name || state.fleet.find((device) => device.imei === day.imei)?.name || 'Sin nombre';
-  elements.routeDialogTitle.textContent = `${name} · ${formatLongDate(day.date)}`;
+  const licensePlate = day.licensePlate || state.fleet.find((device) => device.imei === day.imei)?.licensePlate || 'Sin matrícula';
+  elements.routeDialogTitle.textContent = `${name} · ${licensePlate} · ${formatLongDate(day.date)}`;
   elements.routeDialogMeta.textContent = `IMEI ${day.imei} · ${formatTime(day.startAt)}–${formatTime(day.endAt)}`;
   elements.routeDialogStats.innerHTML = `
     <div><span>Distancia</span><strong>${formatDistance(day.distanceMeters)}</strong></div>
@@ -762,7 +796,7 @@ async function refreshPublicData({ silent = false } = {}) {
       requestJson('/api/tracker/status').catch(() => null)
     ]);
     const nextDays = days || [];
-    const nextDaysFingerprint = nextDays.map((day) => `${day.imei}:${day.name}:${day.date}:${day.pointCount}:${day.endAt}`).join('|');
+    const nextDaysFingerprint = nextDays.map((day) => `${day.imei}:${day.name}:${day.licensePlate}:${day.date}:${day.pointCount}:${day.endAt}`).join('|');
     const historyChanged = nextDaysFingerprint !== state.daysFingerprint;
     state.fleet = fleet || [];
     state.days = nextDays;

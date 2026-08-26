@@ -16,14 +16,14 @@ Budisa recibe telemetría de dispositivos Teltonika, conserva las posiciones GPS
 
 ## Positioning
 
-La plataforma une la recepción validada de paquetes Teltonika con el lenguaje diario de la flota. El IMEI es la identidad técnica única e inmutable del dispositivo; el nombre operativo es una etiqueta editable para que el trabajador reconozca fácilmente el vehículo.
+La plataforma une la recepción validada de paquetes Teltonika con el lenguaje diario de la flota. El IMEI es la identidad técnica única e inmutable del dispositivo; el nombre operativo y la matrícula son etiquetas editables para que el trabajador reconozca rápidamente el vehículo.
 
 ## Operating Context
 
 - El FTC880 envía Codec 8 Extended por TCP al gateway público de Railway.
 - Railway valida y decodifica el paquete y envía un `POST /tracker` firmado a Budisa.
 - Un IMEI desconocido aparece automáticamente como pendiente en Dispositivos.
-- Un administrador asigna un nombre operativo y aprueba, renombra, deshabilita o reactiva el dispositivo desde la aplicación.
+- Un administrador asigna nombre operativo y matrícula, y aprueba, edita, deshabilita o reactiva el dispositivo desde la aplicación.
 - El personal consulta la flota actual, estado de conexión, fix GPS y recorridos diarios desde cuatro vistas: Dashboard, Histórico, Estado y Dispositivos.
 - En una fase posterior se usará FTC887 con Bluetooth y EYE Sensor para avisos de ángulo.
 
@@ -31,14 +31,14 @@ La plataforma une la recepción validada de paquetes Teltonika con el lenguaje d
 
 - Aplicación Node.js/Express con frontend HTML, CSS y JavaScript y persistencia MongoDB.
 - El gateway se autentica mediante HMAC con `TRACKER_SHARED_SECRET` y `TRACKER_KEY_ID`.
-- El IMEI identifica técnicamente al dispositivo; el nombre operativo no sustituye al IMEI ni interviene en la ingesta.
-- Los IMEIs y sus nombres se guardan en MongoDB, nunca como una variable de entorno por camión.
-- Los desconocidos permanecen pendientes hasta recibir un nombre y aprobación administrativa.
+- El IMEI identifica técnicamente al dispositivo; el nombre operativo y la matrícula no sustituyen al IMEI ni intervienen en la ingesta.
+- Los IMEIs, nombres y matrículas se guardan en MongoDB, nunca como una variable de entorno por camión.
+- Los desconocidos permanecen pendientes hasta recibir nombre, matrícula y aprobación administrativa.
 - Las acciones de Dispositivos requieren una clave de administración independiente del secreto del gateway.
 - La ingesta es idempotente por `eventId` y admite múltiples registros por paquete.
 - Railway expone el receptor TCP; Budisa recibe los registros normalizados mediante HTTPS.
 - El mapa usa cartografía OpenStreetMap mediante Leaflet y conserva su atribución.
-- El primer dispositivo tiene el IMEI `862129089568731`; su nombre se gestiona desde Dispositivos.
+- El primer dispositivo tiene el IMEI `862129089568731`; su nombre y matrícula se gestionan desde Dispositivos.
 
 ## Brand Commitments
 
@@ -57,7 +57,7 @@ La plataforma une la recepción validada de paquetes Teltonika con el lenguaje d
 ## Product Principles
 
 - Mostrar primero qué dispositivo está transmitiendo y dónde se encuentra.
-- Presentar siempre nombre e IMEI juntos cuando haya espacio; el nombre ayuda a reconocer y el IMEI verifica.
+- Presentar siempre nombre, matrícula e IMEI juntos cuando haya espacio; nombre y matrícula ayudan a reconocer y el IMEI verifica.
 - Distinguir con claridad datos reales, estados vacíos y errores de conexión.
 - Conservar el recorrido completo y hacerlo explorable por fecha y vehículo.
 - Confirmar al gateway solamente los registros que Budisa ha aceptado.

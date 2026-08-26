@@ -81,24 +81,24 @@
       "kind": "card",
       "refersTo": "route-day",
       "description": "Resumen seleccionable con vehículo, fecha, distancia y velocidad máxima.",
-      "html": "<button class=\"ds-route-day\"><span><strong>Hormigonera 01</strong><small>862129089568731 · 24 ago 2026</small></span><b>8,4 km</b><em>18 puntos · máx. 80 km/h</em></button>",
+      "html": "<button class=\"ds-route-day\"><span><strong>Hormigonera 01</strong><small>1234 ABC · 862129089568731 · 24 ago 2026</small></span><b>8,4 km</b><em>18 puntos · máx. 80 km/h</em></button>",
       "css": ".ds-route-day{display:grid;grid-template-columns:1fr auto;gap:5px 12px;width:320px;padding:14px;border:1px solid rgba(45,212,191,.24);border-radius:12px;background:#142136;color:#eff5ff;text-align:left;font-family:Inter,Segoe UI,system-ui,sans-serif;cursor:pointer;transition:background 180ms ease,transform 180ms ease}.ds-route-day span{display:grid;gap:4px}.ds-route-day small,.ds-route-day em{color:#9aabc2;font-size:11px;font-style:normal}.ds-route-day b{color:#2dd4bf;font-size:13px}.ds-route-day em{grid-column:1/-1}.ds-route-day:hover{background:#18283e;transform:translateY(-1px)}.ds-route-day:focus-visible{outline:2px solid #62d8ba;outline-offset:2px}"
     },
     {
       "name": "Fila de dispositivo",
       "kind": "card",
-      "description": "Lectura compacta de nombre, IMEI, conexión y fix.",
-      "html": "<article class=\"ds-device-row\"><span><strong>Hormigonera 01</strong><small>862129089568731</small></span><span class=\"ds-online\">En línea</span><span>Fix válido</span><time>Ahora</time></article>",
+      "description": "Lectura compacta de nombre, matrícula, IMEI, conexión y fix.",
+      "html": "<article class=\"ds-device-row\"><span><strong>Hormigonera 01</strong><small>1234 ABC · 862129089568731</small></span><span class=\"ds-online\">En línea</span><span>Fix válido</span><time>Ahora</time></article>",
       "css": ".ds-device-row{display:grid;grid-template-columns:1.5fr .7fr .7fr .6fr;align-items:center;gap:12px;padding:14px;border:1px solid rgba(157,179,200,.16);border-radius:12px;background:#142136;color:#eff5ff;font:500 13px Inter,Segoe UI,system-ui,sans-serif}.ds-device-row>span:first-child{display:grid;gap:3px}.ds-device-row small,.ds-device-row time{color:#9aabc2;font-size:11px;font-variant-numeric:tabular-nums}.ds-online{color:#62d8ba;font-weight:700}"
     }
   ],
   "narrative": {
     "northStar": "Centro de Control de Ruta",
-    "overview": "Budisa se expresa como una consola telemática sobria y compacta. La cartografía ocupa el centro de la experiencia, mientras que nombre operativo, IMEI, conexión y fix GPS se leen de un vistazo alrededor de ella. El mundo visual combina grafito azulado, azul de marca y señales turquesa; el ámbar y el coral solo aparecen cuando el estado exige atención.\n\nLa densidad es media-alta en escritorio y se convierte en una secuencia vertical clara en móvil. La interfaz permanece digital y cartográfica: no imita Google Maps, salpicaderos físicos, metal ni instrumental analógico.",
+    "overview": "Budisa se expresa como una consola telemática sobria y compacta. La cartografía ocupa el centro de la experiencia, mientras que nombre operativo, matrícula, IMEI, conexión y fix GPS se leen de un vistazo alrededor de ella. El mundo visual combina grafito azulado, azul de marca y señales turquesa; el ámbar y el coral solo aparecen cuando el estado exige atención.\n\nLa densidad es media-alta en escritorio y se convierte en una secuencia vertical clara en móvil. La interfaz permanece digital y cartográfica: no imita Google Maps, salpicaderos físicos, metal ni instrumental analógico.",
     "keyCharacteristics": [
       "Mapa dominante con cartografía desaturada y recorridos de alto contraste.",
       "Cuatro tareas estables: Dashboard, Histórico, Estado y Dispositivos.",
-      "Nombre operativo como lectura primaria e IMEI como verificación técnica.",
+      "Nombre y matrícula como lectura primaria e IMEI como verificación técnica.",
       "Superficies tonales, bordes finos y profundidad ambiental contenida.",
       "Tema oscuro principal y tema claro con la misma jerarquía semántica."
     ],
@@ -109,7 +109,7 @@
       { "name": "The Layer Before Shadow Rule", "body": "Primero se diferencia una superficie por tono y borde; la sombra solo refuerza una elevación real.", "section": "elevation" }
     ],
     "dos": [
-      "Do mantener nombre e IMEI juntos siempre que el ancho lo permita.",
+      "Do mantener nombre, matrícula e IMEI juntos siempre que el ancho lo permita.",
       "Do mostrar la hora real del GPS y separar claramente estado actual de rutas históricas.",
       "Do usar divisores, alineación y cifras tabulares para escanear datos densos.",
       "Do conservar visible la atribución de OpenStreetMap."

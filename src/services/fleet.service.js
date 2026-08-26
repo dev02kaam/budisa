@@ -88,6 +88,7 @@ async function getFleet() {
     return {
       imei: tracker.imei,
       name: tracker.name || '',
+      licensePlate: tracker.licensePlate || '',
       manufacturer: tracker.manufacturer,
       model: tracker.model,
       enabled: Boolean(tracker.enabled),
@@ -190,10 +191,10 @@ async function getTrackerDays(filters = {}, limit = 500) {
   });
 
   const grouped = [...groups.values()];
-  const names = await Tracker.find({ imei: { $in: grouped.map((group) => group.imei) } })
-    .select({ imei: 1, name: 1 })
+  const trackers = await Tracker.find({ imei: { $in: grouped.map((group) => group.imei) } })
+    .select({ imei: 1, name: 1, licensePlate: 1 })
     .lean();
-  const namesByImei = new Map(names.map((tracker) => [tracker.imei, tracker.name || '']));
+  const trackersByImei = new Map(trackers.map((tracker) => [tracker.imei, tracker]));
 
   return grouped
     .map((group) => {
@@ -202,9 +203,11 @@ async function getTrackerDays(filters = {}, limit = 500) {
         group.distanceMeters += haversineDistanceMeters(group.ordered[index - 1], group.ordered[index]);
       }
       const { ordered, ...summary } = group;
+      const tracker = trackersByImei.get(group.imei);
       return {
         ...summary,
-        name: namesByImei.get(group.imei) || '',
+        name: tracker?.name || '',
+        licensePlate: tracker?.licensePlate || '',
         durationSeconds: Math.max(0, Math.round((group.endAt - group.startAt) / 1000))
       };
     })

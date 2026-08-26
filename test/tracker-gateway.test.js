@@ -97,10 +97,12 @@ async function run() {
   await connectDb();
   await registerTracker({
     imei: '356000000000001',
-    name: 'Hormigonera Norte'
+    name: 'Hormigonera Norte',
+    licensePlate: '1234 abc'
   });
   const registeredTracker = await Tracker.findOne({ imei: '356000000000001' }).lean();
   assert.equal(registeredTracker.name, 'Hormigonera Norte');
+  assert.equal(registeredTracker.licensePlate, '1234 ABC');
   const server = await startServer();
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
@@ -165,6 +167,7 @@ async function run() {
     assert.equal(pendingTracker.approvalStatus, 'pending');
     assert.equal(pendingTracker.enabled, false);
     assert.equal(pendingTracker.name, '');
+    assert.equal(pendingTracker.licensePlate, '');
     assert.ok(pendingTracker.lastAttemptAt);
 
     const unauthorizedRegistry = await fetch(`${baseUrl}/api/trackers`);
@@ -182,20 +185,37 @@ async function run() {
     assert.equal(invalidRegistration.status, 400);
     assert.equal((await invalidRegistration.json()).code, 'INVALID_IMEI');
 
+    const invalidLicensePlate = await fetch(`${baseUrl}/api/trackers`, {
+      method: 'POST',
+      headers: adminHeaders,
+      body: JSON.stringify({ imei: '862129089568730', name: 'Prueba', licensePlate: '@@@' })
+    });
+    assert.equal(invalidLicensePlate.status, 400);
+    assert.equal((await invalidLicensePlate.json()).code, 'INVALID_LICENSE_PLATE');
+
     const registry = await fetch(`${baseUrl}/api/trackers`, { headers: adminHeaders });
     const registryBody = await registry.json();
     assert.equal(registry.status, 200);
     assert.equal(registryBody.data.find((tracker) => tracker.imei === '356000000000999').status, 'pending');
 
-    const approval = await fetch(`${baseUrl}/api/trackers/356000000000999`, {
+    const approvalWithoutLicensePlate = await fetch(`${baseUrl}/api/trackers/356000000000999`, {
       method: 'PATCH',
       headers: adminHeaders,
       body: JSON.stringify({ enabled: true, name: 'Camión Patio' })
+    });
+    assert.equal(approvalWithoutLicensePlate.status, 400);
+    assert.equal((await approvalWithoutLicensePlate.json()).code, 'TRACKER_LICENSE_PLATE_REQUIRED');
+
+    const approval = await fetch(`${baseUrl}/api/trackers/356000000000999`, {
+      method: 'PATCH',
+      headers: adminHeaders,
+      body: JSON.stringify({ enabled: true, name: 'Camión Patio', licensePlate: '5678 DEF' })
     });
     assert.equal(approval.status, 200);
     const approvalBody = await approval.json();
     assert.equal(approvalBody.data.status, 'approved');
     assert.equal(approvalBody.data.name, 'Camión Patio');
+    assert.equal(approvalBody.data.licensePlate, '5678 DEF');
 
     const approvedRetry = signedRequest(unknownPayload);
     const approvedResponse = await fetch(`${baseUrl}/tracker`, {
@@ -226,18 +246,20 @@ async function run() {
     const manualRegistration = await fetch(`${baseUrl}/api/trackers`, {
       method: 'POST',
       headers: adminHeaders,
-      body: JSON.stringify({ imei: '862129089568731', name: 'Camión 01' })
+      body: JSON.stringify({ imei: '862129089568731', name: 'Camión 01', licensePlate: '9012 GHI' })
     });
     assert.equal(manualRegistration.status, 201);
     const manualRegistrationBody = await manualRegistration.json();
     assert.equal(manualRegistrationBody.data.imei, '862129089568731');
     assert.equal(manualRegistrationBody.data.name, 'Camión 01');
+    assert.equal(manualRegistrationBody.data.licensePlate, '9012 GHI');
 
     const fleetResponse = await fetch(`${baseUrl}/api/fleet`);
     const fleetBody = await fleetResponse.json();
     const liveDevice = fleetBody.data.find((device) => device.imei === '356000000000001');
     assert.equal(fleetResponse.status, 200);
     assert.equal(liveDevice.name, 'Hormigonera Norte');
+    assert.equal(liveDevice.licensePlate, '1234 ABC');
     assert.equal(liveDevice.connectionStatus, 'online');
     assert.equal(liveDevice.gpsFix, true);
     assert.equal(liveDevice.latestPosition.satellites, 14);
@@ -252,6 +274,7 @@ async function run() {
     assert.equal(daysResponse.status, 200);
     assert.equal(daysBody.data[0].imei, '356000000000001');
     assert.equal(daysBody.data[0].name, 'Hormigonera Norte');
+    assert.equal(daysBody.data[0].licensePlate, '1234 ABC');
     assert.equal(daysBody.data[0].pointCount, 2);
 
     console.log('ok - valida HMAC, registro pendiente, aprobacion, bloqueo e historico del gateway');

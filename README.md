@@ -19,15 +19,15 @@ Render aloja la web y la API. Railway publica únicamente el socket TCP binario 
 ## Identidad de los dispositivos
 
 - El **IMEI** es la identidad técnica única del dispositivo y la clave que relaciona todas sus posiciones.
-- El **nombre operativo** es una etiqueta editable —por ejemplo, `Hormigonera 01`— para que el trabajador reconozca el vehículo.
-- Ambos se guardan en MongoDB; no se añade una variable de entorno por camión.
-- Un IMEI desconocido se registra automáticamente como pendiente. Desde **Dispositivos** se le asigna un nombre y se aprueba.
+- El **nombre operativo** y la **matrícula** son etiquetas editables —por ejemplo, `Hormigonera 01 · 1234 ABC`— para que el trabajador reconozca el vehículo rápidamente.
+- IMEI, nombre y matrícula se guardan en MongoDB; no se añade una variable de entorno por camión.
+- Un IMEI desconocido se registra automáticamente como pendiente. Desde **Dispositivos** se le asignan nombre y matrícula antes de aprobarlo.
 - Un dispositivo pendiente o deshabilitado no puede guardar posiciones y produce `403 UNKNOWN_DEVICE`, por lo que el gateway responde ACK cero al Teltonika.
 
 También puede registrarse de antemano desde consola:
 
 ```bash
-npm run tracker:register -- 862129089568731 "Hormigonera 01"
+npm run tracker:register -- 862129089568731 "1234 ABC" "Hormigonera 01"
 ```
 
 ## Configuración de producción
@@ -98,10 +98,10 @@ Errores relevantes:
 
 ## Interfaz
 
-- **Dashboard:** resumen de toda la flota, mapa de últimas posiciones, búsqueda y detalle del dispositivo seleccionado.
-- **Histórico:** filtro por nombre o IMEI, vehículo y fechas; totales por jornada y popup con el recorrido completo.
-- **Estado:** tabla operativa con nombre, IMEI, autorización, conexión, fix GPS y última recepción.
-- **Dispositivos:** alta, asignación o cambio de nombre, aprobación, deshabilitación y reactivación mediante clave de administrador.
+- **Dashboard:** resumen de toda la flota, mapa de últimas posiciones, búsqueda por nombre, matrícula o IMEI y detalle del dispositivo seleccionado.
+- **Histórico:** filtro por nombre, matrícula, IMEI, vehículo y fechas; totales por jornada y popup con el recorrido completo.
+- **Estado:** tabla operativa con nombre, matrícula, IMEI, autorización, conexión, fix GPS y última recepción.
+- **Dispositivos:** alta, asignación o cambio de nombre y matrícula, aprobación, deshabilitación y reactivación mediante clave de administrador.
 
 El mapa usa Leaflet sobre cartografía OpenStreetMap con un tratamiento visual propio de Budisa.
 
@@ -114,7 +114,7 @@ El mapa usa Leaflet sobre cartografía OpenStreetMap con un tratamiento visual p
 - `GET /api/tracker/days`: recorridos agrupados por día y dispositivo.
 - `GET /api/tracker/status`: estado no sensible de la integración.
 - `GET/POST /api/trackers`: listado y alta protegidos del registro.
-- `PATCH /api/trackers/:imei`: renombrado, aprobación, reactivación o deshabilitación protegidos.
+- `PATCH /api/trackers/:imei`: cambio de nombre o matrícula, aprobación, reactivación o deshabilitación protegidos.
 
 ## Receptor TCP directo opcional
 

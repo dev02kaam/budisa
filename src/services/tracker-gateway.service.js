@@ -166,17 +166,38 @@ function normalizeTrackerName(value, { required = false } = {}) {
   return name;
 }
 
-async function registerTracker({ imei, name, manufacturer = 'Teltonika', model = 'FTC880' }) {
+function normalizeLicensePlate(value, { required = false } = {}) {
+  const licensePlate = String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  if (required && !licensePlate) {
+    throw new TrackerGatewayError(
+      'La matricula del dispositivo es obligatoria',
+      'TRACKER_LICENSE_PLATE_REQUIRED',
+      400
+    );
+  }
+  if (licensePlate.length > 20 || (licensePlate && !/^[A-Z0-9 -]+$/.test(licensePlate))) {
+    throw new TrackerGatewayError(
+      'La matricula solo puede contener letras, numeros, espacios y guiones',
+      'INVALID_LICENSE_PLATE',
+      400
+    );
+  }
+  return licensePlate;
+}
+
+async function registerTracker({ imei, name, licensePlate, manufacturer = 'Teltonika', model = 'FTC880' }) {
   if (!/^\d{15}$/.test(String(imei || ''))) {
     throw new TrackerGatewayError('El IMEI debe contener 15 digitos', 'INVALID_IMEI', 400);
   }
   const normalizedName = normalizeTrackerName(name, { required: true });
+  const normalizedLicensePlate = normalizeLicensePlate(licensePlate, { required: true });
 
   return Tracker.findOneAndUpdate(
     { imei: String(imei) },
     {
       $set: {
         name: normalizedName,
+        licensePlate: normalizedLicensePlate,
         manufacturer,
         model,
         enabled: true,
@@ -230,6 +251,7 @@ async function listTrackers() {
     .map((tracker) => ({
       imei: tracker.imei,
       name: tracker.name || '',
+      licensePlate: tracker.licensePlate || '',
       status: trackerStatus(tracker),
       enabled: Boolean(tracker.enabled),
       manufacturer: tracker.manufacturer,
@@ -244,7 +266,7 @@ async function listTrackers() {
     .sort((left, right) => (order[left.status] ?? 9) - (order[right.status] ?? 9));
 }
 
-async function updateTracker({ imei, enabled, name }) {
+async function updateTracker({ imei, enabled, name, licensePlate }) {
   if (!/^\d{15}$/.test(String(imei || ''))) {
     throw new TrackerGatewayError('El IMEI debe contener 15 digitos', 'INVALID_IMEI', 400);
   }
@@ -256,15 +278,26 @@ async function updateTracker({ imei, enabled, name }) {
 
   const updates = {};
   if (name !== undefined) updates.name = normalizeTrackerName(name, { required: true });
+  if (licensePlate !== undefined) {
+    updates.licensePlate = normalizeLicensePlate(licensePlate, { required: true });
+  }
   if (enabled !== undefined) {
     if (typeof enabled !== 'boolean') {
       throw new TrackerGatewayError('enabled debe ser true o false', 'INVALID_TRACKER_STATUS', 400);
     }
     const resultingName = updates.name ?? current.name;
+    const resultingLicensePlate = updates.licensePlate ?? current.licensePlate;
     if (enabled && !String(resultingName || '').trim()) {
       throw new TrackerGatewayError(
         'Asigna un nombre antes de habilitar el dispositivo',
         'TRACKER_NAME_REQUIRED',
+        400
+      );
+    }
+    if (enabled && !String(resultingLicensePlate || '').trim()) {
+      throw new TrackerGatewayError(
+        'Asigna una matricula antes de habilitar el dispositivo',
+        'TRACKER_LICENSE_PLATE_REQUIRED',
         400
       );
     }
@@ -279,8 +312,8 @@ async function updateTracker({ imei, enabled, name }) {
   return Tracker.findOneAndUpdate({ imei: String(imei) }, { $set: updates }, { new: true });
 }
 
-async function setTrackerApproval(imei, enabled, name) {
-  return updateTracker({ imei, enabled, name });
+async function setTrackerApproval(imei, enabled, name, licensePlate) {
+  return updateTracker({ imei, enabled, name, licensePlate });
 }
 
 async function claimNonce({ keyId, nonce, toleranceSeconds }) {
