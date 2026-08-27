@@ -953,7 +953,7 @@ input::placeholder {
 
 .fleet-vehicle-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px 12px;
   width: 100%;
   padding: 13px;
@@ -976,6 +976,32 @@ input::placeholder {
 
 .vehicle-row-title {
   min-width: 0;
+}
+
+.vehicle-row-map-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--mint);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.vehicle-row-map-action svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  transition: transform 160ms ease;
+}
+
+.fleet-vehicle-row:hover .vehicle-row-map-action svg,
+.fleet-vehicle-row:focus-visible .vehicle-row-map-action svg {
+  transform: translateX(2px);
+}
+
+.vehicle-row-map-action.is-unavailable {
+  color: var(--faint);
+  font-weight: 700;
 }
 
 .vehicle-row-title strong,

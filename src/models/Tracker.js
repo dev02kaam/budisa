@@ -29,11 +29,11 @@ const TrackerSchema = new mongoose.Schema(
     },
     manufacturer: {
       type: String,
-      default: 'Teltonika'
+      default: ''
     },
     model: {
       type: String,
-      default: 'FTC880'
+      default: ''
     },
     iccid: {
       type: String,

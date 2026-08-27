@@ -105,8 +105,8 @@ function validateGatewayPayload(payload) {
   return {
     imei,
     device: {
-      manufacturer: String(payload.device?.manufacturer || 'Teltonika').slice(0, 80),
-      model: String(payload.device?.model || 'FTC880').slice(0, 80),
+      manufacturer: String(payload.device?.manufacturer || '').slice(0, 80),
+      model: String(payload.device?.model || '').slice(0, 80),
       iccid: payload.device?.iccid ? String(payload.device.iccid).slice(0, 40) : null
     },
     packet: {
@@ -171,7 +171,7 @@ function normalizeLicensePlate(value, { required = false } = {}) {
   return licensePlate;
 }
 
-async function registerTracker({ imei, licensePlate, manufacturer = 'Teltonika', model = 'FTC880' }) {
+async function registerTracker({ imei, licensePlate, manufacturer = '', model = '' }) {
   if (!/^\d{15}$/.test(String(imei || ''))) {
     throw new TrackerGatewayError('El IMEI debe contener 15 digitos', 'INVALID_IMEI', 400);
   }
@@ -243,8 +243,6 @@ async function registerTrackers(rows) {
         update: {
           $set: {
             licensePlate: row.licensePlate,
-            manufacturer: 'Teltonika',
-            model: 'FTC880',
             enabled: true,
             approvalStatus: 'approved'
           }

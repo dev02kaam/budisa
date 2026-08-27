@@ -65,4 +65,4 @@ La plataforma une la recepción validada de paquetes Teltonika con el lenguaje d
 - Distinguir con claridad datos reales, estados vacíos y errores de conexión.
 - Agrupar por fecha el tiempo en movimiento y las basculaciones, con acceso a la posición exacta de cada evento.
 - Confirmar al gateway solamente los registros que Budisa ha aceptado.
-- Preparar el modelo para nuevos datos Teltonika manteniendo el IMEI como identidad técnica única.
+- Admitir distintos modelos de localizador sin asumir un FTC o FMC concreto, manteniendo el IMEI como identidad técnica única.

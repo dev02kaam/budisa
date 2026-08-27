@@ -25,7 +25,7 @@ function buildDirectPayload({ imei, codecId, records }) {
     device: {
       imei,
       manufacturer: 'Teltonika',
-      model: 'FTC880'
+      model: ''
     },
     packet: {
       packetId: digestFor(imei, codecId, ...records.map((record) => record.raw)),

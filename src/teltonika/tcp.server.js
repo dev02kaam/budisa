@@ -56,7 +56,7 @@ function createSession(socket, onPacket, logger) {
           }
 
           socket.write(Buffer.from([0x01]));
-          logger.info(`[Teltonika] FTC880 conectado. IMEI=${imei} origen=${formatRemoteAddress(socket)}`);
+          logger.info(`[Teltonika] Localizador conectado. IMEI=${imei} origen=${formatRemoteAddress(socket)}`);
           continue;
         }
 

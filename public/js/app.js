@@ -619,9 +619,12 @@ function renderFleetList() {
 
   elements.fleetNowList.innerHTML = devices.map((device) => {
     const connection = connectionPresentation(device.connectionStatus);
+    const hasPosition = Boolean(device.latestPosition);
+    const mapAction = hasPosition ? 'Ver en mapa' : 'Sin posición';
     return `
-      <button class="fleet-vehicle-row${state.selectedImei === device.imei ? ' is-selected' : ''}" type="button" data-select-imei="${escapeHtml(device.imei)}">
+      <button class="fleet-vehicle-row${state.selectedImei === device.imei ? ' is-selected' : ''}" type="button" data-select-imei="${escapeHtml(device.imei)}" aria-pressed="${state.selectedImei === device.imei}" aria-label="${escapeHtml(`${deviceLicensePlate(device)} · ${connection.label} · ${mapAction}`)}">
         <span class="vehicle-row-title"><strong>${escapeHtml(deviceLicensePlate(device))}</strong></span>
+        <span class="vehicle-row-map-action${hasPosition ? '' : ' is-unavailable'}">${mapAction}${hasPosition ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7-1.4-1.4 5.6-5.6-5.6-5.6L9 5Z"/></svg>' : ''}</span>
         <span class="vehicle-row-meta">${statusBadge(connection)}<span>${device.gpsFix ? 'Fix GPS' : 'Sin fix GPS'}</span><span>${formatRelative(device.lastSeenAt)}</span></span>
       </button>
     `;
@@ -1011,7 +1014,7 @@ function renderStatus() {
       return `
         <article class="status-device-row">
           <div class="status-device-identity" data-label="Vehículo"><strong>${escapeHtml(deviceLicensePlate(device))}</strong><span>IMEI ${escapeHtml(device.imei)}</span></div>
-          <span class="status-device-model" data-label="Modelo">${escapeHtml(`${device.manufacturer || 'Teltonika'} ${device.model || ''}`.trim())}</span>
+          <span class="status-device-model" data-label="Modelo">${escapeHtml([device.manufacturer, device.model].filter(Boolean).join(' ') || 'Sin identificar')}</span>
           <div data-label="Autorización">${statusBadge(approval)}</div>
           <div data-label="Conexión">${statusBadge(connection)}</div>
           <div data-label="GPS">${statusBadge(fix)}</div>
@@ -1063,7 +1066,7 @@ function renderAdminDevices() {
 
   const trackers = filteredAdminTrackers();
   if (!trackers.length) {
-    elements.deviceAdminList.innerHTML = `<div class="empty-state"><strong>No hay vehículos para mostrar</strong><p>Añade un IMEI, importa un CSV o espera a que un FTC880 transmita.</p></div>`;
+    elements.deviceAdminList.innerHTML = `<div class="empty-state"><strong>No hay vehículos para mostrar</strong><p>Añade un IMEI, importa un CSV o espera a que se conecte un localizador.</p></div>`;
     return;
   }
 
@@ -1077,7 +1080,7 @@ function renderAdminDevices() {
       return `
         <article class="device-admin-row" data-status="${escapeHtml(tracker.status)}" data-device-row="${escapeHtml(tracker.imei)}">
           <div class="device-identity-editor" data-label="Matrícula"><label><span>Matrícula</span><input aria-label="Matrícula de ${escapeHtml(tracker.imei)}" data-license-plate-input="${escapeHtml(tracker.imei)}" maxlength="20" value="${escapeHtml(tracker.licensePlate || '')}" placeholder="1234 ABC" autocapitalize="characters" spellcheck="false" ${busy ? 'disabled' : ''} /></label><button class="row-action" type="button" data-device-action="save" data-imei="${escapeHtml(tracker.imei)}" ${busy ? 'disabled' : ''}>Guardar</button></div>
-          <div class="device-imei" data-label="IMEI"><strong>${escapeHtml(tracker.imei)}</strong><small>${escapeHtml(`${tracker.manufacturer || 'Teltonika'} ${tracker.model || ''}`.trim())}</small></div>
+          <div class="device-imei" data-label="IMEI"><strong>${escapeHtml(tracker.imei)}</strong></div>
           <div data-label="Estado">${statusBadge(presentation)}</div>
           <div class="device-admin-date" data-label="Actividad">${tracker.lastSeenAt ? `Dato: ${escapeHtml(formatRelative(tracker.lastSeenAt))}` : tracker.lastAttemptAt ? `Intento: ${escapeHtml(formatRelative(tracker.lastAttemptAt))}` : 'Sin actividad'}</div>
           <div class="device-admin-actions" data-label="Acciones"><button class="row-action ${action === 'disable' ? 'is-danger' : 'is-primary'}" type="button" data-device-action="${action}" data-imei="${escapeHtml(tracker.imei)}" ${busy ? 'disabled' : ''}>${busy ? 'Guardando…' : actionLabel}</button></div>
