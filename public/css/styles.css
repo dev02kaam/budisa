@@ -97,6 +97,65 @@ select:focus-visible {
   display: none !important;
 }
 
+.app-boot {
+  position: fixed;
+  z-index: 5000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #091321;
+  color: #eff7ff;
+}
+
+.app-boot-content {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.app-boot-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.app-boot-brand .brand-logo-wrap {
+  width: 46px;
+  height: 46px;
+}
+
+.app-boot-brand .brand-word {
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+}
+
+.app-boot-spinner {
+  width: 36px;
+  height: 36px;
+  margin-bottom: 8px;
+  border: 3px solid rgba(98, 216, 186, 0.18);
+  border-top-color: #62d8ba;
+  border-radius: 50%;
+  animation: syncSpin 700ms linear infinite;
+}
+
+.app-boot-content > strong {
+  font-size: 0.92rem;
+}
+
+.app-boot-content > p {
+  margin: 0;
+  color: #9fb1c8;
+  font-size: 0.78rem;
+}
+
+body.is-booting {
+  overflow: hidden;
+}
+
 .login-gate {
   position: relative;
   display: grid;

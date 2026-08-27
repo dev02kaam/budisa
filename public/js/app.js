@@ -100,6 +100,8 @@ const state = {
 
 const elements = {
   body: document.body,
+  appBoot: document.getElementById('appBoot'),
+  appBootMessage: document.getElementById('appBootMessage'),
   loginGate: document.getElementById('loginGate'),
   loginForm: document.getElementById('loginForm'),
   loginUsername: document.getElementById('loginUsername'),
@@ -419,6 +421,12 @@ function setApiStatus(status, label) {
   elements.apiStatus.querySelector('span').textContent = label;
 }
 
+function setBootVisible(active, message = 'Comprobando tu sesión…') {
+  elements.appBootMessage.textContent = message;
+  elements.appBoot.hidden = !active;
+  elements.body.classList.toggle('is-booting', active);
+}
+
 function setSyncing(active, title = 'Actualizando la flota', message = 'Guardando los cambios y sincronizando todos los datos.') {
   state.syncing = active;
   elements.syncTitle.textContent = title;
@@ -440,6 +448,7 @@ function showLogin(message = '') {
   state.sessionUser = '';
   window.apiClient.setCsrfToken('');
   setSyncing(false);
+  setBootVisible(false);
   elements.appShell.hidden = true;
   elements.loginGate.hidden = false;
   elements.loginFeedback.textContent = message;
@@ -470,6 +479,7 @@ function startRefreshTimer() {
 }
 
 async function enterAuthenticatedApp(session) {
+  setBootVisible(true, 'Cargando la flota…');
   state.authenticated = true;
   state.sessionUser = session.username || 'admin';
   window.apiClient.setCsrfToken(session.csrfToken || '');
@@ -477,7 +487,15 @@ async function enterAuthenticatedApp(session) {
   elements.loginGate.hidden = true;
   elements.appShell.hidden = false;
   setView(state.view);
-  await refreshPublicData();
+  try {
+    await refreshPublicData();
+  } finally {
+    setBootVisible(false);
+    window.requestAnimationFrame(() => {
+      if (state.view === 'dashboard') state.fleetMap?.invalidateSize();
+      if (state.view === 'mapa') state.liveMap?.invalidateSize();
+    });
+  }
   startRefreshTimer();
 }
 

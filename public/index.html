@@ -17,7 +17,19 @@
     FORM [seed: centro-control-ruta]: Centro de control de flota en cuatro tareas claras: Dashboard, Histórico, Estado y Vehículos.
     FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
   -->
-  <section class="login-gate" id="loginGate" aria-labelledby="loginTitle">
+  <section class="app-boot" id="appBoot" role="status" aria-live="polite" aria-labelledby="appBootTitle">
+    <div class="app-boot-content">
+      <div class="app-boot-brand">
+        <span class="brand-logo-wrap"><img src="/assets/logoyfavicon.png" alt="" /></span>
+        <span class="brand-word">BUDISA</span>
+      </div>
+      <span class="app-boot-spinner" aria-hidden="true"></span>
+      <strong id="appBootTitle">Abriendo Budisa</strong>
+      <p id="appBootMessage">Comprobando tu sesión…</p>
+    </div>
+  </section>
+
+  <section class="login-gate" id="loginGate" aria-labelledby="loginTitle" hidden>
     <div class="login-route-field" aria-hidden="true">
       <svg viewBox="0 0 900 720" preserveAspectRatio="xMidYMid slice">
         <path class="login-road login-road-muted" d="M-40 596C130 486 207 534 327 409S545 318 602 185 790 107 956 44" />
