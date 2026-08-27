@@ -30,11 +30,11 @@ También puede registrarse de antemano desde consola:
 npm run tracker:register -- 862129089568731 "1234 ABC" "Hormigonera 01"
 ```
 
-Para altas masivas, la pestaña **Vehículos** admite CSV de hasta 250 filas, separado por comas o punto y coma:
+Para altas masivas, la pestaña **Vehículos** admite CSV de hasta 250 filas, separado por punto y coma o comas. La plantilla usa punto y coma para que Excel en español muestre cada campo en su propia columna:
 
 ```csv
-imei,matricula
-862129089568731,1234 ABC
+imei;matricula
+862129089568731;1234 ABC
 ```
 
 La importación valida cada fila, informa de IMEIs repetidos o campos incorrectos y actualiza también los vehículos que ya existan.

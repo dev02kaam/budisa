@@ -1121,7 +1121,7 @@ function updateCsvSelection() {
 }
 
 function downloadVehicleCsvTemplate() {
-  const blob = new Blob(['\uFEFFimei,matricula\r\n'], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob(['\uFEFFimei;matricula\r\n'], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
