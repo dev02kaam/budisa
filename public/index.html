@@ -5,19 +5,57 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Budisa | Control de flota</title>
   <link rel="icon" href="/assets/logoyfavicon.png" type="image/png" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="/css/styles.css" />
 </head>
 <body data-theme="night">
   <!--
-    THESIS: Cada vehículo se entiende por su nombre operativo y se verifica por su IMEI; se evita mezclar telemetría antigua con el trabajo diario de flota.
+    THESIS: Cada vehículo se reconoce por su matrícula y se verifica técnicamente por su IMEI; la operación diaria evita datos telemáticos innecesarios.
     OWN-WORLD: Consola Budisa de grafito y azul profundo, rutas turquesa, estados compactos y superficies cartográficas desaturadas.
-    STORY: El trabajador ve la flota ahora, reconstruye jornadas, comprueba conexión/fix y administra nombres e IMEIs sin salir de la aplicación.
-    FIRST VIEWPORT: Resumen horizontal, mapa vivo dominante y lista de vehículos con velocidad, fix y última transmisión.
-    FORM [seed: centro-control-ruta]: Centro de control de flota en cuatro tareas claras: Dashboard, Histórico, Estado y Dispositivos.
+    STORY: El trabajador ve la flota ahora, consulta movimiento y basculaciones, comprueba conexión/fix y administra matrículas e IMEIs sin salir de la aplicación.
+    FIRST VIEWPORT: Resumen de flota, mapa vivo y lista de matrículas con conexión, fix y última transmisión.
+    FORM [seed: centro-control-ruta]: Centro de control de flota en cuatro tareas claras: Dashboard, Histórico, Estado y Vehículos.
     FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
   -->
-  <div class="app-shell">
+  <section class="login-gate" id="loginGate" aria-labelledby="loginTitle">
+    <div class="login-route-field" aria-hidden="true">
+      <svg viewBox="0 0 900 720" preserveAspectRatio="xMidYMid slice">
+        <path class="login-road login-road-muted" d="M-40 596C130 486 207 534 327 409S545 318 602 185 790 107 956 44" />
+        <path class="login-road login-road-active" d="M-40 596C130 486 207 534 327 409S545 318 602 185 790 107 956 44" />
+        <circle cx="327" cy="409" r="10" />
+        <circle cx="602" cy="185" r="10" />
+      </svg>
+    </div>
+    <main class="login-panel">
+      <div class="login-brand">
+        <span class="brand-logo-wrap"><img src="/assets/logoyfavicon.png" alt="" /></span>
+        <span class="brand-word">BUDISA</span>
+      </div>
+      <div class="login-copy">
+        <h1 id="loginTitle">Control de flota privado</h1>
+        <p>Accede para consultar posiciones, actividad y vehículos Teltonika.</p>
+      </div>
+      <form class="login-form" id="loginForm">
+        <label for="loginUsername"><span>Usuario</span><input id="loginUsername" name="username" type="text" value="admin" maxlength="80" autocomplete="username" required /></label>
+        <label for="loginPassword"><span>Contraseña</span><input id="loginPassword" name="password" type="password" maxlength="256" autocomplete="current-password" required /></label>
+        <button class="primary-button login-submit" id="loginSubmit" type="submit"><span>Entrar en Budisa</span></button>
+      </form>
+      <p class="login-feedback" id="loginFeedback" role="alert" aria-live="polite"></p>
+      <div class="login-security-note">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4.5 5v5.8c0 4.8 3.1 9.1 7.5 10.6 4.4-1.5 7.5-5.8 7.5-10.6V5L12 2Zm0 4.2 4.3 1.7v2.9c0 3.1-1.7 6-4.3 7.3-2.6-1.3-4.3-4.2-4.3-7.3V7.9L12 6.2Z"/></svg>
+        <span>Sesión protegida y datos restringidos al equipo autorizado.</span>
+      </div>
+    </main>
+  </section>
+
+  <div class="sync-overlay" id="syncOverlay" role="status" aria-live="polite" hidden>
+    <div class="sync-panel">
+      <span class="sync-spinner" aria-hidden="true"></span>
+      <div><strong id="syncTitle">Actualizando la flota</strong><p id="syncMessage">Guardando los cambios y sincronizando todos los datos.</p></div>
+    </div>
+  </div>
+
+  <div class="app-shell" id="appShell" hidden>
     <aside class="sidebar">
       <a class="brand" href="#dashboard" data-view-link="dashboard" aria-label="Ir al Dashboard">
         <span class="brand-logo-wrap"><img src="/assets/logoyfavicon.png" alt="" /></span>
@@ -29,6 +67,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12.5 12 4l9 8.5v7a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5v-7Zm4 2.5v3h4v-3H7Zm7-5v8h3v-8h-3Z"/></svg>
           <span>Dashboard</span>
         </button>
+        <button class="nav-item" type="button" data-view="mapa">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.4 3.2 7.2-2.1L22 3.8v16.6l-6.4-2.7-7.2 2.1L2 17.2V.6l6.4 2.6Zm1.2 2v11.9l4.8-1.4V3.8L9.6 5.2ZM4 3.6v12.2l3.6 1.5V5.1L4 3.6Zm12.4.2v11.8l3.6 1.5V5.3l-3.6-1.5Z"/></svg>
+          <span>Mapa en vivo</span>
+        </button>
         <button class="nav-item" type="button" data-view="historico">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 8.5 6H18a6.7 6.7 0 1 1-2.1-2.8L13 9h8V1l-3.2 3.2A9 9 0 0 0 12 3Zm-1 5v5.3l4.2 2.4 1-1.7-3.2-1.9V8h-2Z"/></svg>
           <span>Histórico</span>
@@ -37,9 +79,9 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h3.2l1.6-4.5c.3-.8 1.4-.8 1.7 0L12 17l1.9-5.2c.3-.8 1.4-.8 1.7 0l1.1 3.2H21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3a9 9 0 1 1-9 9 9 9 0 0 1 9-9Z" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".4"/></svg>
           <span>Estado</span>
         </button>
-        <button class="nav-item" type="button" data-view="dispositivos">
+        <button class="nav-item" type="button" data-view="vehiculos">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3Zm0 3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8Zm2 2h4v2h-4v-2Zm0 4h4v2h-4v-2Zm0 4h4v2h-4v-2Z"/></svg>
-          <span>Dispositivos</span>
+          <span>Vehículos</span>
         </button>
       </nav>
 
@@ -64,25 +106,30 @@
             <span aria-hidden="true">☾</span>
           </label>
           <div class="api-status" id="apiStatus"><i></i><span>Conectando</span></div>
+          <button class="session-button" id="logoutButton" type="button" title="Cerrar sesión">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H5.8A1.8 1.8 0 0 0 4 5.8v12.4A1.8 1.8 0 0 0 5.8 20H10v-2H6V6h4V4Zm5.6 3.6-1.4 1.4 2 2H9v2h7.2l-2 2 1.4 1.4L20 12l-4.4-4.4Z"/></svg>
+            <span id="sessionUsername">admin</span>
+          </button>
         </div>
       </header>
 
       <section class="view view-active" id="view-dashboard" data-view="dashboard">
-        <section class="overview-strip" aria-label="Resumen de flota">
-          <div><span>Dispositivos</span><strong id="metricDevices">0</strong><small>registrados</small></div>
-          <div><span>Transmitiendo</span><strong id="metricOnline">0</strong><small>últimos 15 min</small></div>
-          <div><span>Con fix GPS</span><strong id="metricFix">0</strong><small>posición disponible</small></div>
-          <div><span>Distancia hoy</span><strong id="metricDistance">0 km</strong><small>flota completa</small></div>
-        </section>
+        <section class="dashboard-summary-grid" aria-label="Resumen de flota">
+          <aside class="dashboard-metric-rail">
+            <header><span>Flota</span><strong>Resumen general</strong></header>
+            <div class="dashboard-metric"><span>Vehículos activos</span><strong id="metricDevices">0</strong><small>aprobados</small></div>
+            <div class="dashboard-metric"><span>Transmitiendo</span><strong id="metricOnline">0</strong><small>últimos 15 min</small></div>
+            <div class="dashboard-metric"><span>Con fix GPS</span><strong id="metricFix">0</strong><small>posición disponible</small></div>
+            <div class="dashboard-metric"><span>Distancia hoy</span><strong id="metricDistance">0 km</strong><small>flota completa</small></div>
+          </aside>
 
-        <section class="dashboard-grid">
-          <article class="fleet-map-panel">
+          <article class="fleet-map-panel dashboard-map-panel">
             <header class="section-header">
               <div>
-                <h2>Mapa operativo</h2>
-                <p>Última posición aceptada de cada dispositivo.</p>
+                <h2>Flota activa</h2>
+                <p>Vista básica de todos los vehículos en servicio.</p>
               </div>
-              <button class="quiet-button" id="fitFleetBtn" type="button">Ver toda la flota</button>
+              <button class="quiet-button" id="fitFleetBtn" type="button">Encuadrar</button>
             </header>
             <div class="fleet-map-stage">
               <div id="fleetMap" aria-label="Mapa de posiciones actuales de la flota"></div>
@@ -96,33 +143,63 @@
                 <p>Los vehículos aparecerán cuando Budisa reciba su primer punto GPS.</p>
               </div>
             </div>
-            <footer class="vehicle-inspector" id="vehicleInspector">
-              <div>
-                <span>Vehículo seleccionado</span>
-                <strong>Selecciona un dispositivo de la lista</strong>
-              </div>
-              <dl>
-                <div><dt>Velocidad</dt><dd>—</dd></div>
-                <div><dt>Satélites</dt><dd>—</dd></div>
-                <div><dt>Contacto</dt><dd>—</dd></div>
-                <div><dt>Último dato</dt><dd>—</dd></div>
-              </dl>
-            </footer>
           </article>
 
-          <aside class="fleet-now-panel">
-            <header class="section-header">
-              <div>
-                <h2>Flota ahora</h2>
-                <p id="fleetNowCount">0 vehículos</p>
-              </div>
-            </header>
+          <aside class="dashboard-metric-rail dashboard-activity-rail">
+            <header><span>Actividad</span><strong>Ahora mismo</strong></header>
+            <div class="dashboard-metric is-moving"><span>En movimiento</span><strong id="metricMoving">0</strong><small>circulando</small></div>
+            <div class="dashboard-metric is-stopped"><span>Detenidos</span><strong id="metricStopped">0</strong><small>con posición</small></div>
+            <div class="dashboard-metric is-alert"><span>Sin señal</span><strong id="metricNoSignal">0</strong><small>sin enlace reciente</small></div>
+            <div class="dashboard-metric is-pending"><span>Pendientes</span><strong id="metricPending">0</strong><small>por aprobar</small></div>
+          </aside>
+        </section>
+
+        <section class="fleet-now-panel dashboard-fleet-panel">
+          <header class="section-header">
+            <div>
+              <h2>Flota ahora</h2>
+              <p id="fleetNowCount">0 vehículos</p>
+            </div>
             <label class="search-field" for="dashboardSearch">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.8-4.8a7.5 7.5 0 1 0-1.4 1.4l4.8 4.8 1.4-1.4ZM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z"/></svg>
-              <input id="dashboardSearch" type="search" placeholder="Buscar nombre, matrícula o IMEI" autocomplete="off" />
+              <input id="dashboardSearch" type="search" placeholder="Buscar matrícula" autocomplete="off" />
             </label>
-            <div class="fleet-now-list" id="fleetNowList"></div>
-          </aside>
+          </header>
+          <div class="fleet-now-list" id="fleetNowList"></div>
+        </section>
+      </section>
+
+      <section class="view view-live-map" id="view-mapa" data-view="mapa">
+        <section class="live-map-shell" aria-label="Seguimiento en vivo de vehículos seleccionados">
+          <div id="liveMap" aria-label="Mapa en vivo de los vehículos seleccionados"></div>
+
+          <div class="live-map-controls">
+            <button class="live-picker-toggle" id="liveVehiclePickerToggle" type="button" aria-expanded="false" aria-controls="liveVehiclePickerPanel">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v3H5V4Zm-2 6h18v3H3v-3Zm4 6h10v3H7v-3Z"/></svg>
+              <span>Vehículos</span>
+              <strong id="liveSelectedCount">0 seleccionados</strong>
+            </button>
+            <div class="live-picker-panel" id="liveVehiclePickerPanel" hidden>
+              <header><div><strong>Mostrar en el mapa</strong><span>Solo vehículos activos</span></div><button id="livePickerClose" type="button" aria-label="Cerrar selector">×</button></header>
+              <div class="live-picker-actions"><button id="liveSelectAll" type="button">Todos</button><button id="liveClearSelection" type="button">Ninguno</button></div>
+              <div class="live-vehicle-options" id="liveVehicleOptions"></div>
+            </div>
+            <button class="live-fit-button" id="fitLiveMapBtn" type="button" aria-label="Encuadrar vehículos seleccionados" title="Encuadrar vehículos seleccionados">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5v2H6v3H4Zm11-5h5v5h-2V6h-3V4ZM6 15v3h3v2H4v-5h2Zm12 0h2v5h-5v-2h3v-3Z"/></svg>
+            </button>
+          </div>
+
+          <div class="live-map-legend" aria-label="Leyenda de actividad">
+            <span><i class="legend-dot is-moving"></i>En movimiento</span>
+            <span><i class="legend-dot is-stopped"></i>Detenido</span>
+            <span><i class="legend-dot is-offline"></i>Sin enlace</span>
+          </div>
+
+          <div class="map-empty live-map-empty" id="liveMapEmpty">
+            <span class="map-empty-symbol">⌖</span>
+            <strong id="liveMapEmptyTitle">Elige qué vehículos quieres seguir</strong>
+            <p id="liveMapEmptyMessage">Puedes mostrar uno, varios o toda la flota activa desde el selector.</p>
+          </div>
         </section>
       </section>
 
@@ -130,27 +207,26 @@
         <section class="history-filter-panel">
           <div class="section-header">
             <div>
-              <h2>Recorridos por jornada</h2>
-              <p>Filtra por vehículo o fecha y abre la ruta completa.</p>
+              <h2>Actividad por jornada</h2>
+                <p>Consulta tiempo en movimiento y basculaciones por jornada.</p>
             </div>
             <button class="quiet-button" id="clearHistoryFilters" type="button">Limpiar filtros</button>
           </div>
           <form class="history-filters" id="historyFilters">
-            <label><span>Buscar</span><input id="historySearch" type="search" placeholder="Nombre, matrícula o IMEI" autocomplete="off" /></label>
-            <label><span>Dispositivo</span><select id="historyDevice"><option value="">Todos los vehículos</option></select></label>
+            <label><span>Matrícula</span><input id="historySearch" type="search" placeholder="Buscar matrícula" autocomplete="off" /></label>
             <label><span>Desde</span><input id="historyFrom" type="date" /></label>
             <label><span>Hasta</span><input id="historyTo" type="date" /></label>
           </form>
           <div class="history-totals" id="historyTotals">
             <span><strong>0</strong> jornadas</span>
-            <span><strong>0 km</strong> recorridos</span>
-            <span><strong>0</strong> puntos GPS</span>
+            <span><strong>0 min</strong> en movimiento</span>
+            <span><strong>0</strong> basculaciones</span>
           </div>
         </section>
 
         <section class="route-ledger">
           <header class="route-ledger-head" aria-hidden="true">
-            <span>Vehículo</span><span>Jornada</span><span>Horario</span><span>Distancia</span><span>Vel. máxima</span><span>Puntos</span><span></span>
+            <span>Vehículo</span><span>Fecha</span><span>Tiempo en movimiento</span><span>Basculaciones</span>
           </header>
           <div id="historyRouteList"></div>
         </section>
@@ -160,7 +236,7 @@
         <section class="status-overview">
           <header class="section-header">
             <div>
-              <h2>Estado de dispositivos</h2>
+              <h2>Estado de vehículos</h2>
               <p>Autorización, enlace y calidad GPS de un vistazo.</p>
             </div>
             <div class="status-legend">
@@ -173,42 +249,49 @@
         </section>
       </section>
 
-      <section class="view" id="view-dispositivos" data-view="dispositivos">
+      <section class="view" id="view-vehiculos" data-view="vehiculos">
         <section class="devices-admin-panel">
           <header class="devices-admin-header">
             <div>
-              <h2>Dispositivos</h2>
-              <p>Asocia cada IMEI a un nombre y una matrícula reconocibles para el equipo.</p>
+              <h2>Vehículos</h2>
+              <p>Asocia cada IMEI Teltonika a la matrícula del vehículo.</p>
             </div>
             <div class="device-admin-summary" id="deviceAdminSummary"><span><strong>0</strong> activos</span><span><strong>0</strong> pendientes</span></div>
           </header>
 
-          <form class="admin-unlock" id="adminUnlockForm">
-            <input type="text" name="username" value="tracker-admin" autocomplete="username" hidden aria-hidden="true" tabindex="-1" />
-            <label for="adminTokenInput"><span>Clave de administración</span><input id="adminTokenInput" name="password" type="password" autocomplete="current-password" placeholder="Introduce TRACKER_ADMIN_TOKEN" /></label>
-            <button class="primary-button" type="submit">Acceder</button>
-            <p>La clave permanece únicamente en esta pestaña.</p>
-          </form>
+          <div class="vehicle-intake">
+            <div class="vehicle-auto-registration">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-8.7 6.7h2.1A7 7 0 1 1 5 13H2l4 4 4-4H7a5 5 0 1 0 1.1-3.1l1.5 1.3A3 3 0 1 1 9 13h3l-4 4-4-4h1a7 7 0 0 1 7-8V3Z"/></svg>
+              <div><strong>Detección automática activa</strong><p>Cuando un FTC880 desconocido transmita, su IMEI aparecerá aquí como pendiente. Solo tendrás que añadir la matrícula para aprobarlo.</p></div>
+            </div>
+            <form class="vehicle-csv-form" id="vehicleCsvForm">
+              <div class="vehicle-csv-copy"><strong>Importar varios desde CSV</strong><p>Columnas: <code>imei,matricula</code>. También admite archivos separados por punto y coma.</p></div>
+              <div class="vehicle-csv-controls">
+                <label class="csv-file-picker" for="vehicleCsvInput"><input id="vehicleCsvInput" type="file" accept=".csv,text/csv" /><span>Seleccionar CSV</span></label>
+                <span class="csv-file-name" id="vehicleCsvFileName">Ningún archivo seleccionado</span>
+                <button class="row-action" id="vehicleCsvTemplate" type="button">Descargar plantilla</button>
+                <button class="primary-button" id="vehicleCsvImportButton" type="submit" disabled>Importar vehículos</button>
+              </div>
+            </form>
+          </div>
 
-          <div class="devices-admin-workspace" id="devicesAdminWorkspace" hidden>
+          <div class="devices-admin-workspace" id="devicesAdminWorkspace">
             <form class="device-create-form" id="deviceCreateForm">
-              <label for="deviceNameInput"><span>Nombre del vehículo</span><input id="deviceNameInput" name="name" maxlength="80" placeholder="Ej. Hormigonera 01" autocomplete="off" required /></label>
               <label for="deviceLicensePlateInput"><span>Matrícula</span><input id="deviceLicensePlateInput" name="licensePlate" maxlength="20" pattern="[A-Za-z0-9 -]{1,20}" placeholder="Ej. 1234 ABC" autocomplete="off" autocapitalize="characters" spellcheck="false" required /></label>
               <label for="deviceImeiInput"><span>IMEI Teltonika</span><input id="deviceImeiInput" name="imei" inputmode="numeric" maxlength="15" pattern="[0-9]{15}" placeholder="15 dígitos" autocomplete="off" required /></label>
-              <button class="primary-button" id="deviceCreateButton" type="submit">Añadir dispositivo</button>
+              <button class="primary-button" id="deviceCreateButton" type="submit">Añadir vehículo</button>
             </form>
             <div class="admin-session-actions">
               <label class="search-field" for="deviceAdminSearch">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.8-4.8a7.5 7.5 0 1 0-1.4 1.4l4.8 4.8 1.4-1.4ZM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z"/></svg>
-                <input id="deviceAdminSearch" type="search" placeholder="Nombre, matrícula o IMEI" autocomplete="off" />
+                <input id="deviceAdminSearch" type="search" placeholder="Buscar matrícula" autocomplete="off" />
               </label>
-              <button class="quiet-button" id="adminLockButton" type="button">Cerrar acceso</button>
             </div>
           </div>
 
           <div class="admin-feedback" id="adminFeedback" role="status" aria-live="polite"></div>
           <div class="device-admin-list" id="deviceAdminList">
-            <div class="empty-state"><strong>Administración bloqueada</strong><p>Introduce la clave para identificar, añadir o deshabilitar dispositivos.</p></div>
+            <div class="empty-state"><strong>Cargando vehículos…</strong><p>Consultando el registro guardado en Budisa.</p></div>
           </div>
         </section>
       </section>
@@ -219,19 +302,18 @@
     </main>
   </div>
 
-  <dialog class="route-dialog" id="routeDialog">
+  <dialog class="route-dialog tip-location-dialog" id="tipLocationDialog">
     <article>
       <header class="route-dialog-header">
-        <div><h2 id="routeDialogTitle">Recorrido</h2><p id="routeDialogMeta">Detalle de jornada</p></div>
-        <button id="routeDialogClose" type="button" aria-label="Cerrar recorrido">×</button>
+        <div><h2 id="tipLocationDialogTitle">Basculación</h2><p id="tipLocationDialogMeta">Posición registrada</p></div>
+        <button id="tipLocationDialogClose" type="button" aria-label="Cerrar mapa de basculación">×</button>
       </header>
-      <div class="route-dialog-stats" id="routeDialogStats"></div>
-      <div class="route-dialog-map" id="routeDialogMap" aria-label="Mapa del recorrido diario"></div>
+      <div class="route-dialog-map" id="tipLocationMap" aria-label="Mapa de la basculación"></div>
     </article>
   </dialog>
 
   <script src="/js/api.js"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

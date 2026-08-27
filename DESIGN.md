@@ -91,15 +91,15 @@ components:
 
 **Creative North Star: "Centro de Control de Ruta"**
 
-Budisa se expresa como una consola telemática sobria y compacta. La cartografía ocupa el centro de la experiencia, mientras que nombre operativo, matrícula, IMEI, conexión y fix GPS se leen de un vistazo alrededor de ella. El mundo visual combina grafito azulado, azul de marca y señales turquesa; el ámbar y el coral solo aparecen cuando el estado exige atención.
+Budisa se expresa como una consola telemática sobria y compacta. La cartografía ocupa el centro de la experiencia, mientras que matrícula, IMEI, conexión y fix GPS se leen de un vistazo alrededor de ella. El mundo visual combina grafito azulado, azul de marca y señales turquesa; el ámbar y el coral solo aparecen cuando el estado exige atención.
 
 La densidad es media-alta en escritorio y se convierte en una secuencia vertical clara en móvil. La interfaz permanece digital y cartográfica: no imita Google Maps, salpicaderos físicos, metal ni instrumental analógico.
 
 **Key Characteristics:**
 
 - Mapa dominante con cartografía desaturada y recorridos de alto contraste.
-- Cuatro tareas estables: Dashboard, Histórico, Estado y Dispositivos.
-- Nombre y matrícula como lectura primaria e IMEI como verificación técnica.
+- Cinco tareas estables: Dashboard, Mapa en vivo, Histórico, Estado y Vehículos.
+- Matrícula como lectura primaria e IMEI como verificación técnica.
 - Superficies tonales, bordes finos y profundidad ambiental contenida.
 - Tema oscuro principal y tema claro con la misma jerarquía semántica.
 
@@ -140,30 +140,32 @@ El tema nocturno parte de un lienzo azul profundo y separa niveles con superfici
 ### Hierarchy
 
 - **Display:** peso 900, reservado a la marca Budisa.
-- **Headline:** peso 800, para el título de cada vista y del diálogo de recorrido.
+- **Headline:** peso 800, para el título de cada vista y del diálogo de ubicación.
 - **Title:** peso 700, para vehículos, secciones y jornadas.
 - **Body:** peso 400 e interlineado 1.45, para instrucciones y metadatos.
 - **Label:** peso 700, mayúsculas y espaciado amplio, para métricas y columnas.
 
-**The Numeric Glance Rule.** Velocidad, hora, distancia, recuentos e IMEIs usan cifras tabulares y más contraste que sus etiquetas.
+**The Numeric Glance Rule.** Horas, coordenadas, recuentos e IMEIs usan cifras tabulares y más contraste que sus etiquetas.
 
 ## Layout
 
-En escritorio, una barra lateral fija de 248 px acompaña un área flexible. El Dashboard abre con cuatro métricas y después enfrenta un mapa dominante con una columna de vehículos; el detalle seleccionado queda debajo. Histórico usa una barra de filtros seguida por totales y jornadas; Estado y Dispositivos utilizan filas tabulares de alta densidad.
+En escritorio, una barra lateral fija de 248 px acompaña un área flexible. El Dashboard funciona como resumen: un mapa compacto queda entre dos raíles de métricas y la flota actual ocupa una franja inferior. Mapa en vivo elimina las métricas y dedica la superficie al seguimiento de los vehículos elegidos mediante un selector flotante. Histórico usa una barra de filtros seguida por totales y jornadas; Estado y Vehículos utilizan filas tabulares de alta densidad.
 
 El ritmo recurrente es de 8, 16 y 24 px. A 1240 px se reduce la composición del Dashboard; a 980 px la navegación pasa arriba y las columnas se apilan; a 700 px cada fila se transforma en ficha etiquetada, y a 430 px se comprimen controles y tipografía sin reducir las áreas táctiles.
 
 **The Map-First Rule.** Cuando la tarea es comprender movimiento o ubicación, la cartografía conserva más área que cualquier lista o resumen asociado.
 
+El acceso abre en una escena nocturna propia: el panel de credenciales comparte marca, tipografía y señales de ruta con la consola, mientras una geometría cartográfica abstracta comunica el contexto sin exponer datos. Las operaciones de Vehículos usan una capa de sincronización con foco protegido y mensaje concreto hasta que todas las vistas están actualizadas. El alta masiva aparece como una acción secundaria compacta junto a la explicación del registro automático.
+
 ## Elevation & Depth
 
-La profundidad combina capas tonales, bordes claros de baja opacidad y sombras ambientales. El panel principal usa una sombra difusa; controles sobre el mapa y el diálogo de ruta elevan un nivel adicional. Los elementos internos permanecen planos salvo que floten realmente.
+La profundidad combina capas tonales, bordes claros de baja opacidad y sombras ambientales. El panel principal usa una sombra difusa; controles sobre el mapa y el diálogo de ubicación elevan un nivel adicional. Los elementos internos permanecen planos salvo que floten realmente.
 
 ### Shadow Vocabulary
 
 - **Panel ambiental:** sombra extensa y tenue para superficies principales.
 - **Control flotante:** sombra media para leyendas y controles cartográficos.
-- **Foco modal:** sombra profunda para aislar el recorrido diario.
+- **Foco modal:** sombra profunda para aislar la posición de una basculación.
 
 **The Layer Before Shadow Rule.** Primero se diferencia una superficie por tono y borde; la sombra solo refuerza una elevación real.
 
@@ -205,17 +207,17 @@ Cada acceso combina icono técnico y etiqueta. Es una columna en escritorio, una
 
 ### Mapa operativo
 
-Los marcadores muestran nombre antes que IMEI y distinguen conexión reciente, datos antiguos y ausencia de posición. La ruta histórica usa turquesa con casing oscuro; su diálogo presenta las métricas antes del mapa y marca inicio y fin.
+Los marcadores muestran la matrícula y distinguen movimiento, detención y ausencia de enlace. Mapa en vivo conserva la selección y traza en turquesa los puntos recibidos durante la sesión. Histórico despliega las basculaciones dentro de cada jornada y cada coordenada abre un mapa puntual.
 
 ### Filas de dispositivo
 
-Dashboard prioriza nombre, matrícula, velocidad, fix y última recepción. Estado mantiene una lectura no editable. Dispositivos agrupa los campos de nombre y matrícula como identificación operativa; pendiente usa ámbar, activo menta y deshabilitado un tono neutro.
+Dashboard prioriza métricas agregadas y una lectura básica por matrícula; Mapa en vivo limita el contenido a matrícula y actividad. Estado mantiene una lectura no editable. Vehículos asocia matrícula e IMEI; pendiente usa ámbar, activo menta y deshabilitado un tono neutro.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** mantener nombre, matrícula e IMEI juntos siempre que el ancho lo permita.
+- **Do** usar la matrícula en la operación y mostrar el IMEI solo donde sea necesaria la verificación técnica.
 - **Do** mostrar la hora real del GPS y separar claramente estado actual de rutas históricas.
 - **Do** usar divisores, alineación y cifras tabulares para escanear datos densos.
 - **Do** conservar visible la atribución de OpenStreetMap.

@@ -9,12 +9,6 @@ const TrackerSchema = new mongoose.Schema(
       index: true,
       match: /^\d{15}$/
     },
-    name: {
-      type: String,
-      trim: true,
-      maxlength: 80,
-      default: ''
-    },
     licensePlate: {
       type: String,
       trim: true,

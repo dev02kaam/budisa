@@ -3,6 +3,14 @@ const TrackerPoint = require('../models/TrackerPoint');
 
 const ONLINE_WINDOW_MS = 15 * 60 * 1000;
 const STALE_WINDOW_MS = 60 * 60 * 1000;
+const MAX_MOVEMENT_INTERVAL_MS = 15 * 60 * 1000;
+const TIPPER_ANGLE_THRESHOLD_DEG = 25;
+const MADRID_TIME_ZONE = 'Europe/Madrid';
+const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const madridOffsetFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: MADRID_TIME_ZONE,
+  timeZoneName: 'longOffset'
+});
 
 function toValidDate(value) {
   if (!value) return null;
@@ -16,7 +24,7 @@ function pointDate(point) {
 
 function dayKeyFor(date) {
   const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/Madrid',
+    timeZone: MADRID_TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit'
@@ -25,6 +33,63 @@ function dayKeyFor(date) {
     return result;
   }, {});
   return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function badDateRange(message) {
+  const error = new Error(message);
+  error.code = 'INVALID_DATE_RANGE';
+  error.statusCode = 400;
+  return error;
+}
+
+function validDateKey(value) {
+  if (!DATE_KEY_PATTERN.test(String(value || ''))) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+}
+
+function nextDateKey(value) {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+function madridOffsetMinutes(date) {
+  const zone = madridOffsetFormatter.formatToParts(date).find((part) => part.type === 'timeZoneName')?.value || 'GMT+00:00';
+  const match = zone.match(/^GMT([+-])(\d{2}):(\d{2})$/);
+  if (!match) return 0;
+  const minutes = Number(match[2]) * 60 + Number(match[3]);
+  return match[1] === '-' ? -minutes : minutes;
+}
+
+function madridDayStart(value) {
+  const [year, month, day] = value.split('-').map(Number);
+  const localMidnightAsUtc = Date.UTC(year, month - 1, day);
+  let instant = new Date(localMidnightAsUtc);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    instant = new Date(localMidnightAsUtc - madridOffsetMinutes(instant) * 60_000);
+  }
+  return instant;
+}
+
+function buildMadridDayRange(filters = {}) {
+  if (filters.from && !validDateKey(filters.from)) {
+    throw badDateRange('La fecha inicial debe tener formato AAAA-MM-DD.');
+  }
+  if (filters.to && !validDateKey(filters.to)) {
+    throw badDateRange('La fecha final debe tener formato AAAA-MM-DD.');
+  }
+  if (filters.from && filters.to && filters.from > filters.to) {
+    throw badDateRange('La fecha inicial no puede ser posterior a la fecha final.');
+  }
+
+  const range = {};
+  if (filters.from) range.$gte = madridDayStart(filters.from);
+  if (filters.to) range.$lt = madridDayStart(nextDateKey(filters.to));
+  return range;
 }
 
 function haversineDistanceMeters(left, right) {
@@ -67,19 +132,56 @@ function validCoordinates(point) {
     && !(latitude === 0 && longitude === 0);
 }
 
+function booleanState(value) {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0) return false;
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (['true', 'on', 'active', 'raised', 'open', 'yes'].includes(normalized)) return true;
+  if (['false', 'off', 'inactive', 'lowered', 'closed', 'no'].includes(normalized)) return false;
+  return null;
+}
+
+function tipperState(point) {
+  const known = point?.metadata?.knownIo;
+  if (!known || typeof known !== 'object') return null;
+
+  const stateKeys = [
+    'tipperRaised',
+    'tipperActive',
+    'bodyRaised',
+    'bedRaised',
+    'dumpBodyRaised',
+    'basculating',
+    'tiltAlert'
+  ];
+  for (const key of stateKeys) {
+    if (!(key in known)) continue;
+    const raised = booleanState(known[key]);
+    if (raised !== null) return { raised };
+  }
+
+  const angleKeys = ['tipperAngleDeg', 'tiltAngleDeg', 'eyeAngleDeg', 'bedAngleDeg', 'bodyAngleDeg'];
+  for (const key of angleKeys) {
+    if (!(key in known)) continue;
+    const angle = Number(known[key]);
+    if (Number.isFinite(angle)) return { raised: Math.abs(angle) >= TIPPER_ANGLE_THRESHOLD_DEG };
+  }
+
+  return null;
+}
+
 async function getLatestPoints(imeis) {
   if (!imeis.length) return new Map();
   const rows = await TrackerPoint.aggregate([
     { $match: { deviceId: { $in: imeis } } },
-    { $addFields: { _fleetSortAt: { $ifNull: ['$positionAt', '$receivedAt'] } } },
-    { $sort: { _fleetSortAt: -1, receivedAt: -1 } },
+    { $sort: { deviceId: 1, positionAt: -1 } },
     { $group: { _id: '$deviceId', point: { $first: '$$ROOT' } } }
   ]);
   return new Map(rows.map((row) => [row._id, row.point]));
 }
 
 async function getFleet() {
-  const trackers = await Tracker.find().sort({ name: 1, imei: 1 }).lean();
+  const trackers = await Tracker.find().sort({ licensePlate: 1, imei: 1 }).lean();
   const latestByImei = await getLatestPoints(trackers.map((tracker) => tracker.imei));
 
   return trackers.map((tracker) => {
@@ -87,7 +189,6 @@ async function getFleet() {
     const gpsFix = Boolean(latest && latest.metadata?.gpsValid !== false && validCoordinates(latest));
     return {
       imei: tracker.imei,
-      name: tracker.name || '',
       licensePlate: tracker.licensePlate || '',
       manufacturer: tracker.manufacturer,
       model: tracker.model,
@@ -103,7 +204,6 @@ async function getFleet() {
             latitude: Number(latest.gps.latitude),
             longitude: Number(latest.gps.longitude),
             altitudeM: Number(latest.gps.altitude || 0),
-            speedKph: Number(latest.gps.speed || 0),
             headingDeg: Number(latest.gps.heading || 0),
             satellites: Number(latest.metadata?.satellites || 0),
             ignition: latest.metadata?.ignition ?? null,
@@ -131,10 +231,18 @@ async function getTrackerPoints(filters = {}, limit = 10000) {
   }
 
   if (filters.from || filters.to) {
-    return TrackerPoint.find(query).sort({ positionAt: 1, receivedAt: 1 }).limit(limit).lean();
+    return TrackerPoint.find(query)
+      .select({ 'gps.speed': 0 })
+      .sort({ positionAt: 1, receivedAt: 1 })
+      .limit(limit)
+      .lean();
   }
 
-  const latest = await TrackerPoint.find(query).sort({ positionAt: -1, receivedAt: -1 }).limit(limit).lean();
+  const latest = await TrackerPoint.find(query)
+    .select({ 'gps.speed': 0 })
+    .sort({ positionAt: -1, receivedAt: -1 })
+    .limit(limit)
+    .lean();
   return latest.reverse();
 }
 
@@ -145,8 +253,10 @@ async function getTrackerDays(filters = {}, limit = 500) {
     'metadata.gpsValid': { $ne: false }
   };
   if (filters.imei) query.deviceId = filters.imei;
+  if (filters.from || filters.to) query.positionAt = buildMadridDayRange(filters);
 
   const points = await TrackerPoint.find(query)
+    .select({ deviceId: 1, positionAt: 1, receivedAt: 1, gps: 1, metadata: 1 })
     .sort({ positionAt: -1, receivedAt: -1 })
     .limit(100000)
     .lean();
@@ -169,7 +279,8 @@ async function getTrackerDays(filters = {}, limit = 500) {
       timestamp,
       latitude,
       longitude,
-      speed: Number(point.gps?.speed || 0)
+      movement: booleanState(point.metadata?.movement),
+      tipper: tipperState(point)
     };
     const group = groups.get(key) || {
       date,
@@ -177,38 +288,54 @@ async function getTrackerDays(filters = {}, limit = 500) {
       pointCount: 0,
       startAt: timestamp,
       endAt: timestamp,
-      maxSpeedKph: 0,
+      movementSeconds: 0,
       distanceMeters: 0,
+      tipEvents: [],
       ordered: []
     };
 
     group.pointCount += 1;
     if (timestamp < group.startAt) group.startAt = timestamp;
     if (timestamp > group.endAt) group.endAt = timestamp;
-    group.maxSpeedKph = Math.max(group.maxSpeedKph, Number.isFinite(item.speed) ? item.speed : 0);
     group.ordered.push(item);
     groups.set(key, group);
   });
 
   const grouped = [...groups.values()];
   const trackers = await Tracker.find({ imei: { $in: grouped.map((group) => group.imei) } })
-    .select({ imei: 1, name: 1, licensePlate: 1 })
+    .select({ imei: 1, licensePlate: 1 })
     .lean();
   const trackersByImei = new Map(trackers.map((tracker) => [tracker.imei, tracker]));
 
   return grouped
     .map((group) => {
       group.ordered.sort((left, right) => left.timestamp - right.timestamp);
+      let previousTipperRaised = null;
       for (let index = 1; index < group.ordered.length; index += 1) {
-        group.distanceMeters += haversineDistanceMeters(group.ordered[index - 1], group.ordered[index]);
+        const previous = group.ordered[index - 1];
+        const current = group.ordered[index];
+        group.distanceMeters += haversineDistanceMeters(previous, current);
+        const intervalMs = current.timestamp - previous.timestamp;
+        if (previous.movement === true && intervalMs > 0) {
+          group.movementSeconds += Math.round(Math.min(intervalMs, MAX_MOVEMENT_INTERVAL_MS) / 1000);
+        }
       }
+      group.ordered.forEach((item) => {
+        if (!item.tipper) return;
+        if (item.tipper.raised && previousTipperRaised !== true) {
+          group.tipEvents.push({
+            timestamp: item.timestamp,
+            latitude: item.latitude,
+            longitude: item.longitude
+          });
+        }
+        previousTipperRaised = item.tipper.raised;
+      });
       const { ordered, ...summary } = group;
       const tracker = trackersByImei.get(group.imei);
       return {
         ...summary,
-        name: tracker?.name || '',
-        licensePlate: tracker?.licensePlate || '',
-        durationSeconds: Math.max(0, Math.round((group.endAt - group.startAt) / 1000))
+        licensePlate: tracker?.licensePlate || ''
       };
     })
     .sort((left, right) => right.endAt - left.endAt)

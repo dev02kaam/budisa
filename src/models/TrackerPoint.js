@@ -5,7 +5,6 @@ const GpsSchema = new mongoose.Schema(
     latitude: { type: Number, required: true },
     longitude: { type: Number, required: true },
     altitude: { type: Number, default: 0 },
-    speed: { type: Number, default: 0 },
     heading: { type: Number, default: 0 }
   },
   { _id: false }

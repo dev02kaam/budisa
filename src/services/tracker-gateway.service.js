@@ -79,7 +79,6 @@ function validateGatewayPayload(payload) {
     const altitude = finiteNumber(gps.altitudeM ?? 0, `records[${index}].gps.altitudeM`);
     const heading = finiteNumber(gps.angleDeg ?? 0, `records[${index}].gps.angleDeg`, { min: 0, max: 360 });
     const satellites = finiteNumber(gps.satellites ?? 0, `records[${index}].gps.satellites`, { min: 0, max: 255 });
-    const speed = finiteNumber(gps.speedKph ?? 0, `records[${index}].gps.speedKph`, { min: 0 });
 
     return {
       eventId,
@@ -93,7 +92,6 @@ function validateGatewayPayload(payload) {
         altitude,
         heading,
         satellites,
-        speed,
         valid: gps.valid !== false
       },
       io: {
@@ -130,7 +128,6 @@ function buildTrackerPoint(tracker, normalized, record) {
       latitude: record.gps.latitude,
       longitude: record.gps.longitude,
       altitude: record.gps.altitude,
-      speed: record.gps.speed,
       heading: record.gps.heading
     },
     source: 'teltonika-gateway',
@@ -155,22 +152,11 @@ function buildTrackerPoint(tracker, normalized, record) {
   };
 }
 
-function normalizeTrackerName(value, { required = false } = {}) {
-  const name = String(value || '').trim().replace(/\s+/g, ' ');
-  if (required && !name) {
-    throw new TrackerGatewayError('El nombre del dispositivo es obligatorio', 'TRACKER_NAME_REQUIRED', 400);
-  }
-  if (name.length > 80) {
-    throw new TrackerGatewayError('El nombre no puede superar 80 caracteres', 'INVALID_TRACKER_NAME', 400);
-  }
-  return name;
-}
-
 function normalizeLicensePlate(value, { required = false } = {}) {
   const licensePlate = String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
   if (required && !licensePlate) {
     throw new TrackerGatewayError(
-      'La matricula del dispositivo es obligatoria',
+      'La matricula del vehículo es obligatoria',
       'TRACKER_LICENSE_PLATE_REQUIRED',
       400
     );
@@ -185,18 +171,16 @@ function normalizeLicensePlate(value, { required = false } = {}) {
   return licensePlate;
 }
 
-async function registerTracker({ imei, name, licensePlate, manufacturer = 'Teltonika', model = 'FTC880' }) {
+async function registerTracker({ imei, licensePlate, manufacturer = 'Teltonika', model = 'FTC880' }) {
   if (!/^\d{15}$/.test(String(imei || ''))) {
     throw new TrackerGatewayError('El IMEI debe contener 15 digitos', 'INVALID_IMEI', 400);
   }
-  const normalizedName = normalizeTrackerName(name, { required: true });
   const normalizedLicensePlate = normalizeLicensePlate(licensePlate, { required: true });
 
   return Tracker.findOneAndUpdate(
     { imei: String(imei) },
     {
       $set: {
-        name: normalizedName,
         licensePlate: normalizedLicensePlate,
         manufacturer,
         model,
@@ -206,6 +190,83 @@ async function registerTracker({ imei, name, licensePlate, manufacturer = 'Telto
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
+}
+
+async function registerTrackers(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new TrackerGatewayError('El CSV no contiene vehículos para importar', 'EMPTY_TRACKER_IMPORT', 400);
+  }
+  if (rows.length > 250) {
+    throw new TrackerGatewayError('Cada importación admite un máximo de 250 vehículos', 'TRACKER_IMPORT_LIMIT', 400);
+  }
+
+  const seenImeis = new Set();
+  const errors = [];
+  const validRows = [];
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
+    const rowNumber = Number.isInteger(row?.rowNumber) && row.rowNumber > 1 && row.rowNumber < 100000
+      ? row.rowNumber
+      : index + 2;
+    const imei = String(row?.imei || '').trim();
+
+    if (seenImeis.has(imei)) {
+      errors.push({ rowNumber, imei, code: 'DUPLICATE_IMPORT_IMEI', error: 'El IMEI está repetido en el CSV' });
+      continue;
+    }
+    seenImeis.add(imei);
+
+    try {
+      if (!/^\d{15}$/.test(imei)) {
+        throw new TrackerGatewayError('El IMEI debe contener 15 digitos', 'INVALID_IMEI', 400);
+      }
+      validRows.push({
+        rowNumber,
+        imei,
+        licensePlate: normalizeLicensePlate(row?.licensePlate, { required: true })
+      });
+    } catch (error) {
+      errors.push({
+        rowNumber,
+        imei,
+        code: error.code || 'TRACKER_IMPORT_ERROR',
+        error: error.statusCode && error.statusCode < 500 ? error.message : 'No se ha podido importar esta fila'
+      });
+    }
+  }
+
+  if (validRows.length) {
+    await Tracker.bulkWrite(validRows.map((row) => ({
+      updateOne: {
+        filter: { imei: row.imei },
+        update: {
+          $set: {
+            licensePlate: row.licensePlate,
+            manufacturer: 'Teltonika',
+            model: 'FTC880',
+            enabled: true,
+            approvalStatus: 'approved'
+          }
+        },
+        upsert: true,
+        setDefaultsOnInsert: true
+      }
+    })), { ordered: false });
+  }
+
+  const imported = validRows.map((row) => ({
+    rowNumber: row.rowNumber,
+    imei: row.imei,
+    licensePlate: row.licensePlate
+  }));
+
+  return {
+    importedCount: imported.length,
+    errorCount: errors.length,
+    imported,
+    errors
+  };
 }
 
 async function recordTrackerAttempt(normalized) {
@@ -250,7 +311,6 @@ async function listTrackers() {
   return trackers
     .map((tracker) => ({
       imei: tracker.imei,
-      name: tracker.name || '',
       licensePlate: tracker.licensePlate || '',
       status: trackerStatus(tracker),
       enabled: Boolean(tracker.enabled),
@@ -266,7 +326,7 @@ async function listTrackers() {
     .sort((left, right) => (order[left.status] ?? 9) - (order[right.status] ?? 9));
 }
 
-async function updateTracker({ imei, enabled, name, licensePlate }) {
+async function updateTracker({ imei, enabled, licensePlate }) {
   if (!/^\d{15}$/.test(String(imei || ''))) {
     throw new TrackerGatewayError('El IMEI debe contener 15 digitos', 'INVALID_IMEI', 400);
   }
@@ -277,7 +337,6 @@ async function updateTracker({ imei, enabled, name, licensePlate }) {
   }
 
   const updates = {};
-  if (name !== undefined) updates.name = normalizeTrackerName(name, { required: true });
   if (licensePlate !== undefined) {
     updates.licensePlate = normalizeLicensePlate(licensePlate, { required: true });
   }
@@ -285,18 +344,10 @@ async function updateTracker({ imei, enabled, name, licensePlate }) {
     if (typeof enabled !== 'boolean') {
       throw new TrackerGatewayError('enabled debe ser true o false', 'INVALID_TRACKER_STATUS', 400);
     }
-    const resultingName = updates.name ?? current.name;
     const resultingLicensePlate = updates.licensePlate ?? current.licensePlate;
-    if (enabled && !String(resultingName || '').trim()) {
-      throw new TrackerGatewayError(
-        'Asigna un nombre antes de habilitar el dispositivo',
-        'TRACKER_NAME_REQUIRED',
-        400
-      );
-    }
     if (enabled && !String(resultingLicensePlate || '').trim()) {
       throw new TrackerGatewayError(
-        'Asigna una matricula antes de habilitar el dispositivo',
+        'Asigna una matricula antes de habilitar el vehículo',
         'TRACKER_LICENSE_PLATE_REQUIRED',
         400
       );
@@ -312,8 +363,8 @@ async function updateTracker({ imei, enabled, name, licensePlate }) {
   return Tracker.findOneAndUpdate({ imei: String(imei) }, { $set: updates }, { new: true });
 }
 
-async function setTrackerApproval(imei, enabled, name, licensePlate) {
-  return updateTracker({ imei, enabled, name, licensePlate });
+async function setTrackerApproval(imei, enabled, licensePlate) {
+  return updateTracker({ imei, enabled, licensePlate });
 }
 
 async function claimNonce({ keyId, nonce, toleranceSeconds }) {
@@ -412,6 +463,7 @@ module.exports = {
   listTrackers,
   recordTrackerAttempt,
   registerTracker,
+  registerTrackers,
   releaseNonce,
   setTrackerApproval,
   updateTracker,

@@ -44,7 +44,6 @@ function buildDirectPayload({ imei, codecId, records }) {
         altitudeM: record.gps.altitude,
         angleDeg: record.gps.angle,
         satellites: record.gps.satellites,
-        speedKph: record.gps.speed,
         valid: isUsableGps(record.gps)
       },
       io: {

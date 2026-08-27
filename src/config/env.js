@@ -19,6 +19,16 @@ function readBoolean(name, fallback = false) {
   return String(raw).toLowerCase() === 'true';
 }
 
+function readPositiveInteger(name, fallback) {
+  const value = Number(process.env[name] || fallback);
+
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${name} debe ser un entero mayor que cero`);
+  }
+
+  return value;
+}
+
 const config = {
   port: readPort('PORT', 3002),
   teltonikaTcpEnabled: readBoolean('TELTONIKA_TCP_ENABLED', false),
@@ -26,9 +36,12 @@ const config = {
   teltonikaPublicHost: process.env.TELTONIKA_PUBLIC_HOST || 'crossover.proxy.rlwy.net',
   teltonikaPublicPort: readPort('TELTONIKA_PUBLIC_PORT', 22945),
   trackerSharedSecret: process.env.TRACKER_SHARED_SECRET || '',
-  trackerAdminToken: process.env.TRACKER_ADMIN_TOKEN || '',
   trackerKeyId: process.env.TRACKER_KEY_ID || 'gateway-v1',
   trackerSignatureToleranceSeconds: Number(process.env.TRACKER_SIGNATURE_TOLERANCE_SECONDS || 300),
+  appLoginUser: process.env.APP_LOGIN_USER || '',
+  appLoginPassword: process.env.APP_LOGIN_PASSWORD || '',
+  appSessionHours: readPositiveInteger('APP_SESSION_HOURS', 12),
+  appCookieSecure: readBoolean('APP_COOKIE_SECURE', process.env.NODE_ENV === 'production'),
   mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/budisa',
   useMemoryMongo: readBoolean('USE_MEMORY_MONGO', false),
   nodeEnv: process.env.NODE_ENV || 'development'

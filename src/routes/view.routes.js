@@ -5,8 +5,10 @@ const router = express.Router();
 
 router.get('/', renderIndex);
 router.get('/dashboard', renderIndex);
+router.get('/mapa', renderIndex);
 router.get('/historico', renderIndex);
 router.get('/estado', renderIndex);
+router.get('/vehiculos', renderIndex);
 router.get('/tracker', renderIndex);
 
 module.exports = router;

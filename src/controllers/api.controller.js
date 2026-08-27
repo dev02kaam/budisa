@@ -3,6 +3,7 @@ const {
   getGatewayStatus,
   listTrackers,
   registerTracker,
+  registerTrackers,
   updateTracker
 } = require('../services/tracker-gateway.service');
 
@@ -72,14 +73,12 @@ async function registerTrackerDevice(req, res, next) {
   try {
     const trackerDevice = await registerTracker({
       imei: String(req.body?.imei || '').trim(),
-      name: req.body?.name,
       licensePlate: req.body?.licensePlate
     });
     res.status(201).json({
       ok: true,
       data: {
         imei: trackerDevice.imei,
-        name: trackerDevice.name,
         licensePlate: trackerDevice.licensePlate,
         status: trackerDevice.approvalStatus,
         enabled: trackerDevice.enabled
@@ -90,13 +89,21 @@ async function registerTrackerDevice(req, res, next) {
   }
 }
 
+async function importTrackerDevices(req, res, next) {
+  try {
+    const result = await registerTrackers(req.body?.vehicles);
+    res.json({ ok: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function updateTrackerDevice(req, res, next) {
   try {
     const hasEnabled = typeof req.body?.enabled === 'boolean';
-    const hasName = typeof req.body?.name === 'string';
     const hasLicensePlate = typeof req.body?.licensePlate === 'string';
-    if (!hasEnabled && !hasName && !hasLicensePlate) {
-      const error = new Error('Indica un nombre, una matricula o un estado para guardar');
+    if (!hasEnabled && !hasLicensePlate) {
+      const error = new Error('Indica una matricula o un estado para guardar');
       error.code = 'EMPTY_TRACKER_UPDATE';
       error.statusCode = 400;
       throw error;
@@ -105,14 +112,12 @@ async function updateTrackerDevice(req, res, next) {
     const trackerDevice = await updateTracker({
       imei: req.params.imei,
       ...(hasEnabled ? { enabled: req.body.enabled } : {}),
-      ...(hasName ? { name: req.body.name } : {}),
       ...(hasLicensePlate ? { licensePlate: req.body.licensePlate } : {})
     });
     res.json({
       ok: true,
       data: {
         imei: trackerDevice.imei,
-        name: trackerDevice.name,
         licensePlate: trackerDevice.licensePlate,
         status: trackerDevice.approvalStatus,
         enabled: trackerDevice.enabled
@@ -125,6 +130,7 @@ async function updateTrackerDevice(req, res, next) {
 
 module.exports = {
   fleet,
+  importTrackerDevices,
   registerTrackerDevice,
   tracker,
   trackerDays,

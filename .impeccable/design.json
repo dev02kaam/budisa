@@ -45,6 +45,13 @@
   },
   "components": [
     {
+      "name": "Acceso privado",
+      "kind": "form",
+      "description": "Puerta de entrada nocturna con marca Budisa, credenciales y contexto cartografico sin datos de flota.",
+      "html": "<form class=\"ds-login\"><h1>Control de flota privado</h1><label>Usuario<input autocomplete=\"username\"></label><label>Contrasena<input type=\"password\" autocomplete=\"current-password\"></label><button>Entrar en Budisa</button></form>",
+      "css": ".ds-login{display:grid;gap:18px;width:440px;padding:48px;border-radius:16px;background:#101c2c;color:#eff5ff;box-shadow:0 22px 58px rgba(0,5,12,.46)}.ds-login input{min-height:50px;border:1px solid rgba(157,179,200,.24);border-radius:12px;background:#0b1626;color:#eff5ff}.ds-login button{min-height:50px;border:0;border-radius:10px;background:#62d8ba;color:#081b18;font-weight:750}"
+    },
+    {
       "name": "Navegación activa",
       "kind": "nav",
       "refersTo": "nav-active",
@@ -97,7 +104,7 @@
     "overview": "Budisa se expresa como una consola telemática sobria y compacta. La cartografía ocupa el centro de la experiencia, mientras que nombre operativo, matrícula, IMEI, conexión y fix GPS se leen de un vistazo alrededor de ella. El mundo visual combina grafito azulado, azul de marca y señales turquesa; el ámbar y el coral solo aparecen cuando el estado exige atención.\n\nLa densidad es media-alta en escritorio y se convierte en una secuencia vertical clara en móvil. La interfaz permanece digital y cartográfica: no imita Google Maps, salpicaderos físicos, metal ni instrumental analógico.",
     "keyCharacteristics": [
       "Mapa dominante con cartografía desaturada y recorridos de alto contraste.",
-      "Cuatro tareas estables: Dashboard, Histórico, Estado y Dispositivos.",
+      "Cuatro tareas estables: Dashboard, Histórico, Estado y Vehículos.",
       "Nombre y matrícula como lectura primaria e IMEI como verificación técnica.",
       "Superficies tonales, bordes finos y profundidad ambiental contenida.",
       "Tema oscuro principal y tema claro con la misma jerarquía semántica."

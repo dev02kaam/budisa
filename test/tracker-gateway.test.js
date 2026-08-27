@@ -2,9 +2,12 @@ const assert = require('node:assert/strict');
 const crypto = require('crypto');
 
 process.env.USE_MEMORY_MONGO = 'true';
+process.env.NODE_ENV = 'test';
 process.env.TRACKER_SHARED_SECRET = 'test-shared-secret';
-process.env.TRACKER_ADMIN_TOKEN = 'test-admin-token';
 process.env.TRACKER_KEY_ID = 'gateway-v1';
+process.env.APP_LOGIN_USER = 'admin';
+process.env.APP_LOGIN_PASSWORD = 'test-login-password';
+process.env.APP_COOKIE_SECURE = 'false';
 
 const app = require('../src/app');
 const { connectDb, disconnectDb } = require('../src/config/db');
@@ -63,7 +66,14 @@ function buildPayload(imei = '356000000000001') {
       io: {
         eventId: 239,
         raw: { 16: 15342234, 21: 4 },
-        known: { totalOdometerM: 15342234, gsmSignal: 4, ignition: true, movement: true }
+        known: {
+          totalOdometerM: 15342234,
+          gsmSignal: 4,
+          ignition: true,
+          movement: true,
+          tipperRaised: index === 1,
+          tiltAngleDeg: index === 1 ? 32 : 0
+        }
       }
     }))
   };
@@ -93,15 +103,32 @@ function signedRequest(payload, nonce = crypto.randomUUID()) {
   };
 }
 
+async function login(baseUrl) {
+  const response = await fetch(`${baseUrl}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'test-login-password' })
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  const setCookie = response.headers.get('set-cookie') || '';
+  assert.match(setCookie, /budisa_session=/);
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /SameSite=Strict/i);
+  return {
+    'Content-Type': 'application/json',
+    Cookie: setCookie.split(';')[0],
+    'X-Budisa-CSRF': payload.data.csrfToken
+  };
+}
+
 async function run() {
   await connectDb();
   await registerTracker({
     imei: '356000000000001',
-    name: 'Hormigonera Norte',
     licensePlate: '1234 abc'
   });
   const registeredTracker = await Tracker.findOne({ imei: '356000000000001' }).lean();
-  assert.equal(registeredTracker.name, 'Hormigonera Norte');
   assert.equal(registeredTracker.licensePlate, '1234 ABC');
   const server = await startServer();
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -122,6 +149,7 @@ async function run() {
     assert.equal(saved[0].deviceId, '356000000000001');
     assert.equal(saved[0].metadata.imei, '356000000000001');
     assert.equal(saved[0].metadata.ignition, true);
+    assert.equal('speed' in saved[0].gps, false);
 
     const replay = await fetch(`${baseUrl}/tracker`, {
       method: 'POST',
@@ -166,21 +194,33 @@ async function run() {
     const pendingTracker = await Tracker.findOne({ imei: '356000000000999' }).lean();
     assert.equal(pendingTracker.approvalStatus, 'pending');
     assert.equal(pendingTracker.enabled, false);
-    assert.equal(pendingTracker.name, '');
+    assert.equal(pendingTracker.name, undefined);
     assert.equal(pendingTracker.licensePlate, '');
     assert.ok(pendingTracker.lastAttemptAt);
 
     const unauthorizedRegistry = await fetch(`${baseUrl}/api/trackers`);
     assert.equal(unauthorizedRegistry.status, 401);
 
-    const adminHeaders = {
-      'Content-Type': 'application/json',
-      'X-Tracker-Admin-Token': 'test-admin-token'
-    };
+    const invalidLogin = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'incorrecta' })
+    });
+    assert.equal(invalidLogin.status, 401);
+
+    const adminHeaders = await login(baseUrl);
+    const csrfRejected = await fetch(`${baseUrl}/api/trackers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: adminHeaders.Cookie },
+      body: JSON.stringify({ imei: '862129089568730', licensePlate: '1111 AAA' })
+    });
+    assert.equal(csrfRejected.status, 403);
+    assert.equal((await csrfRejected.json()).code, 'INVALID_CSRF_TOKEN');
+
     const invalidRegistration = await fetch(`${baseUrl}/api/trackers`, {
       method: 'POST',
       headers: adminHeaders,
-      body: JSON.stringify({ imei: '123', name: 'Prueba' })
+      body: JSON.stringify({ imei: '123', licensePlate: '1111 AAA' })
     });
     assert.equal(invalidRegistration.status, 400);
     assert.equal((await invalidRegistration.json()).code, 'INVALID_IMEI');
@@ -188,7 +228,7 @@ async function run() {
     const invalidLicensePlate = await fetch(`${baseUrl}/api/trackers`, {
       method: 'POST',
       headers: adminHeaders,
-      body: JSON.stringify({ imei: '862129089568730', name: 'Prueba', licensePlate: '@@@' })
+      body: JSON.stringify({ imei: '862129089568730', licensePlate: '@@@' })
     });
     assert.equal(invalidLicensePlate.status, 400);
     assert.equal((await invalidLicensePlate.json()).code, 'INVALID_LICENSE_PLATE');
@@ -201,7 +241,7 @@ async function run() {
     const approvalWithoutLicensePlate = await fetch(`${baseUrl}/api/trackers/356000000000999`, {
       method: 'PATCH',
       headers: adminHeaders,
-      body: JSON.stringify({ enabled: true, name: 'Camión Patio' })
+      body: JSON.stringify({ enabled: true })
     });
     assert.equal(approvalWithoutLicensePlate.status, 400);
     assert.equal((await approvalWithoutLicensePlate.json()).code, 'TRACKER_LICENSE_PLATE_REQUIRED');
@@ -209,12 +249,11 @@ async function run() {
     const approval = await fetch(`${baseUrl}/api/trackers/356000000000999`, {
       method: 'PATCH',
       headers: adminHeaders,
-      body: JSON.stringify({ enabled: true, name: 'Camión Patio', licensePlate: '5678 DEF' })
+      body: JSON.stringify({ enabled: true, licensePlate: '5678 DEF' })
     });
     assert.equal(approval.status, 200);
     const approvalBody = await approval.json();
     assert.equal(approvalBody.data.status, 'approved');
-    assert.equal(approvalBody.data.name, 'Camión Patio');
     assert.equal(approvalBody.data.licensePlate, '5678 DEF');
 
     const approvedRetry = signedRequest(unknownPayload);
@@ -246,36 +285,74 @@ async function run() {
     const manualRegistration = await fetch(`${baseUrl}/api/trackers`, {
       method: 'POST',
       headers: adminHeaders,
-      body: JSON.stringify({ imei: '862129089568731', name: 'Camión 01', licensePlate: '9012 GHI' })
+      body: JSON.stringify({ imei: '862129089568731', licensePlate: '9012 GHI' })
     });
     assert.equal(manualRegistration.status, 201);
     const manualRegistrationBody = await manualRegistration.json();
     assert.equal(manualRegistrationBody.data.imei, '862129089568731');
-    assert.equal(manualRegistrationBody.data.name, 'Camión 01');
     assert.equal(manualRegistrationBody.data.licensePlate, '9012 GHI');
 
-    const fleetResponse = await fetch(`${baseUrl}/api/fleet`);
+    const csvImport = await fetch(`${baseUrl}/api/trackers/import`, {
+      method: 'POST',
+      headers: adminHeaders,
+      body: JSON.stringify({
+        vehicles: [
+          { rowNumber: 2, imei: '862129089568732', licensePlate: '3456 JKL' },
+          { rowNumber: 3, imei: '862129089568733', licensePlate: '7890 MNO' },
+          { rowNumber: 4, imei: '123', licensePlate: '1111 AAA' },
+          { rowNumber: 5, imei: '862129089568732', licensePlate: '2222 BBB' }
+        ]
+      })
+    });
+    assert.equal(csvImport.status, 200);
+    const csvImportBody = await csvImport.json();
+    assert.equal(csvImportBody.data.importedCount, 2);
+    assert.equal(csvImportBody.data.errorCount, 2);
+    assert.equal(csvImportBody.data.errors.find((item) => item.rowNumber === 4).code, 'INVALID_IMEI');
+    assert.equal(csvImportBody.data.errors.find((item) => item.rowNumber === 5).code, 'DUPLICATE_IMPORT_IMEI');
+    const csvVehicle = await Tracker.findOne({ imei: '862129089568732' }).lean();
+    assert.equal(csvVehicle.licensePlate, '3456 JKL');
+    assert.equal(csvVehicle.approvalStatus, 'approved');
+
+    const fleetResponse = await fetch(`${baseUrl}/api/fleet`, { headers: adminHeaders });
     const fleetBody = await fleetResponse.json();
     const liveDevice = fleetBody.data.find((device) => device.imei === '356000000000001');
     assert.equal(fleetResponse.status, 200);
-    assert.equal(liveDevice.name, 'Hormigonera Norte');
     assert.equal(liveDevice.licensePlate, '1234 ABC');
     assert.equal(liveDevice.connectionStatus, 'online');
     assert.equal(liveDevice.gpsFix, true);
     assert.equal(liveDevice.latestPosition.satellites, 14);
+    assert.equal('speedKph' in liveDevice.latestPosition, false);
 
-    const filteredResponse = await fetch(`${baseUrl}/api/tracker?imei=356000000000001`);
+    const filteredResponse = await fetch(`${baseUrl}/api/tracker?imei=356000000000001`, { headers: adminHeaders });
     const filteredBody = await filteredResponse.json();
     assert.equal(filteredResponse.status, 200);
     assert.equal(filteredBody.data.length, 2);
+    assert.equal('speed' in filteredBody.data[0].gps, false);
 
-    const daysResponse = await fetch(`${baseUrl}/api/tracker/days?imei=356000000000001`);
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
+    const daysResponse = await fetch(`${baseUrl}/api/tracker/days?imei=356000000000001&from=${today}&to=${today}`, { headers: adminHeaders });
     const daysBody = await daysResponse.json();
     assert.equal(daysResponse.status, 200);
     assert.equal(daysBody.data[0].imei, '356000000000001');
-    assert.equal(daysBody.data[0].name, 'Hormigonera Norte');
     assert.equal(daysBody.data[0].licensePlate, '1234 ABC');
     assert.equal(daysBody.data[0].pointCount, 2);
+    assert.equal(daysBody.data[0].movementSeconds, 60);
+    assert.equal(daysBody.data[0].tipEvents.length, 1);
+    assert.equal(daysBody.data[0].tipEvents[0].latitude, 40.4178);
+
+    const invalidRange = await fetch(`${baseUrl}/api/tracker/days?from=2026-08-31&to=2026-08-01`, { headers: adminHeaders });
+    assert.equal(invalidRange.status, 400);
+    assert.equal((await invalidRange.json()).code, 'INVALID_DATE_RANGE');
+
+    const logoutResponse = await fetch(`${baseUrl}/auth/logout`, {
+      method: 'POST',
+      headers: adminHeaders,
+      body: '{}'
+    });
+    assert.equal(logoutResponse.status, 200);
+    const signedOutResponse = await fetch(`${baseUrl}/api/fleet`, { headers: adminHeaders });
+    assert.equal(signedOutResponse.status, 401);
 
     console.log('ok - valida HMAC, registro pendiente, aprobacion, bloqueo e historico del gateway');
   } finally {
