@@ -87,6 +87,7 @@ const state = {
   adminTrackers: [],
   adminLoading: false,
   adminBusyImei: '',
+  adminEditingImei: '',
   daysFingerprint: '',
   historyLoaded: false,
   historyLoading: false,
@@ -446,6 +447,7 @@ function showLogin(message = '') {
   stopRefreshTimer();
   state.authenticated = false;
   state.sessionUser = '';
+  state.adminEditingImei = '';
   window.apiClient.setCsrfToken('');
   setSyncing(false);
   setBootVisible(false);
@@ -469,7 +471,7 @@ function startRefreshTimer() {
       try {
         await Promise.all([
           refreshPublicData({ silent: true }),
-          state.view === 'vehiculos' ? loadAdminTrackers({ silent: true }) : Promise.resolve()
+          state.view === 'vehiculos' && !state.adminEditingImei ? loadAdminTrackers({ silent: true }) : Promise.resolve()
         ]);
       } finally {
         state.refreshing = false;
@@ -1093,15 +1095,31 @@ function renderAdminDevices() {
     ${trackers.map((tracker) => {
       const presentation = approvalPresentation(tracker.status);
       const busy = state.adminBusyImei === tracker.imei;
+      const editing = state.adminEditingImei === tracker.imei;
       const action = tracker.status === 'pending' ? 'approve' : tracker.status === 'approved' ? 'disable' : 'reactivate';
       const actionLabel = tracker.status === 'pending' ? 'Aprobar' : tracker.status === 'approved' ? 'Deshabilitar' : 'Reactivar';
+      const licensePlate = tracker.licensePlate || '';
+      const identity = editing
+        ? `<div class="device-identity-editor" data-label="Matrícula">
+            <input aria-label="Matrícula de ${escapeHtml(tracker.imei)}" data-license-plate-input="${escapeHtml(tracker.imei)}" maxlength="20" value="${escapeHtml(licensePlate)}" placeholder="1234 ABC" autocapitalize="characters" spellcheck="false" ${busy ? 'disabled' : ''} />
+            <div class="device-inline-edit-actions">
+              <button class="row-action is-primary" type="button" data-device-action="save" data-imei="${escapeHtml(tracker.imei)}" ${busy ? 'disabled' : ''}>${busy ? 'Guardando…' : 'Guardar'}</button>
+              <button class="row-action" type="button" data-device-action="cancel-edit" data-imei="${escapeHtml(tracker.imei)}" ${busy ? 'disabled' : ''}>Cancelar</button>
+            </div>
+          </div>`
+        : `<div class="device-identity-display${licensePlate ? '' : ' is-empty'}" data-label="Matrícula">
+            <strong>${escapeHtml(licensePlate || 'Sin matrícula')}</strong>
+            <button class="device-edit-button" type="button" data-device-action="edit" data-imei="${escapeHtml(tracker.imei)}" aria-label="Editar matrícula de ${escapeHtml(tracker.imei)}" title="Editar matrícula" ${busy ? 'disabled' : ''}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15.7 4.3 4 4L9 19H5v-4L15.7 4.3Zm0 2.8L7 15.8V17h1.2l8.7-8.7-1.2-1.2Zm2-4.8a1.4 1.4 0 0 1 2 0l2 2a1.4 1.4 0 0 1 0 2l-1 1-4-4 1-1Z"/></svg>
+            </button>
+          </div>`;
       return `
         <article class="device-admin-row" data-status="${escapeHtml(tracker.status)}" data-device-row="${escapeHtml(tracker.imei)}">
-          <div class="device-identity-editor" data-label="Matrícula"><label><span>Matrícula</span><input aria-label="Matrícula de ${escapeHtml(tracker.imei)}" data-license-plate-input="${escapeHtml(tracker.imei)}" maxlength="20" value="${escapeHtml(tracker.licensePlate || '')}" placeholder="1234 ABC" autocapitalize="characters" spellcheck="false" ${busy ? 'disabled' : ''} /></label><button class="row-action" type="button" data-device-action="save" data-imei="${escapeHtml(tracker.imei)}" ${busy ? 'disabled' : ''}>Guardar</button></div>
+          ${identity}
           <div class="device-imei" data-label="IMEI"><strong>${escapeHtml(tracker.imei)}</strong></div>
           <div data-label="Estado">${statusBadge(presentation)}</div>
           <div class="device-admin-date" data-label="Actividad">${tracker.lastSeenAt ? `Dato: ${escapeHtml(formatRelative(tracker.lastSeenAt))}` : tracker.lastAttemptAt ? `Intento: ${escapeHtml(formatRelative(tracker.lastAttemptAt))}` : 'Sin actividad'}</div>
-          <div class="device-admin-actions" data-label="Acciones"><button class="row-action ${action === 'disable' ? 'is-danger' : 'is-primary'}" type="button" data-device-action="${action}" data-imei="${escapeHtml(tracker.imei)}" ${busy ? 'disabled' : ''}>${busy ? 'Guardando…' : actionLabel}</button></div>
+          <div class="device-admin-actions" data-label="Acciones"><button class="row-action ${action === 'disable' ? 'is-danger' : 'is-primary'}" type="button" data-device-action="${action}" data-imei="${escapeHtml(tracker.imei)}" ${busy ? 'disabled' : ''}>${busy && !editing ? 'Guardando…' : actionLabel}</button></div>
         </article>
       `;
     }).join('')}
@@ -1250,12 +1268,38 @@ function licensePlateInputFor(imei) {
 async function handleDeviceAction(button) {
   const imei = button.dataset.imei;
   const action = button.dataset.deviceAction;
-  const licensePlate = normalizeLicensePlate(licensePlateInputFor(imei)?.value);
   if (!imei || !action) return;
+  if (action === 'edit') {
+    state.adminEditingImei = imei;
+    setAdminFeedback('');
+    renderAdminDevices();
+    window.requestAnimationFrame(() => {
+      const input = licensePlateInputFor(imei);
+      input?.focus();
+      input?.select();
+    });
+    return;
+  }
+  if (action === 'cancel-edit') {
+    state.adminEditingImei = '';
+    setAdminFeedback('');
+    renderAdminDevices();
+    return;
+  }
+
+  const tracker = state.adminTrackers.find((item) => item.imei === imei);
+  const storedLicensePlate = normalizeLicensePlate(tracker?.licensePlate);
+  const licensePlate = action === 'save'
+    ? normalizeLicensePlate(licensePlateInputFor(imei)?.value)
+    : storedLicensePlate;
   if ((action === 'save' || action === 'approve' || action === 'reactivate')
     && (!licensePlate || !/^[A-Z0-9 -]{1,20}$/.test(licensePlate))) {
     setAdminFeedback('Asigna una matrícula válida antes de guardar o habilitar el vehículo.', 'error');
-    licensePlateInputFor(imei)?.focus();
+    if (state.adminEditingImei !== imei) {
+      state.adminEditingImei = imei;
+      renderAdminDevices();
+    }
+    window.requestAnimationFrame(() => licensePlateInputFor(imei)?.focus());
     return;
   }
   if (action === 'disable' && !window.confirm(`¿Deshabilitar ${licensePlate || imei}? Dejará de aceptar posiciones hasta que lo reactives.`)) return;
@@ -1269,17 +1313,20 @@ async function handleDeviceAction(button) {
   renderAdminDevices();
   setAdminFeedback(`${action === 'disable' ? 'Deshabilitando' : 'Guardando'} ${licensePlate || imei}…`);
   setSyncing(true, 'Actualizando vehículo', `Aplicando los cambios de ${licensePlate || imei} en toda la aplicación.`);
+  let saved = false;
   try {
     await requestJson(`/api/trackers/${encodeURIComponent(imei)}`, {
       method: 'PATCH',
       body: JSON.stringify(payload)
     });
+    saved = true;
     setAdminFeedback(`${licensePlate || imei} actualizado.`, 'success');
     await refreshVehicleViews();
   } catch (error) {
     setAdminFeedback(error.message, 'error');
   } finally {
     state.adminBusyImei = '';
+    if (saved && action === 'save') state.adminEditingImei = '';
     setSyncing(false);
     renderAdminDevices();
   }
@@ -1416,6 +1463,16 @@ function setupListeners() {
   elements.deviceAdminList.addEventListener('click', (event) => {
     const button = event.target.closest('[data-device-action]');
     if (button) handleDeviceAction(button);
+  });
+  elements.deviceAdminList.addEventListener('keydown', (event) => {
+    const input = event.target.closest('[data-license-plate-input]');
+    if (!input || !['Enter', 'Escape'].includes(event.key)) return;
+    event.preventDefault();
+    const imei = input.dataset.licensePlateInput;
+    const action = event.key === 'Enter' ? 'save' : 'cancel-edit';
+    elements.deviceAdminList
+      .querySelector(`[data-device-action="${action}"][data-imei="${CSS.escape(imei)}"]`)
+      ?.click();
   });
 
   elements.tipLocationDialogClose.addEventListener('click', closeTipLocationDialog);

@@ -1521,15 +1521,13 @@ input::placeholder {
 }
 
 .history-filters label,
-.device-create-form label,
-.device-identity-editor label {
+.device-create-form label {
   display: grid;
   gap: 7px;
 }
 
 .history-filters label > span,
-.device-create-form label > span,
-.device-identity-editor label > span {
+.device-create-form label > span {
   color: var(--muted);
   font-size: 0.68rem;
   font-weight: 800;
@@ -1995,15 +1993,70 @@ input::placeholder {
   background: var(--amber-soft);
 }
 
+.device-identity-display,
 .device-identity-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
+  min-width: 0;
+}
+
+.device-identity-display {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
-.device-identity-editor label {
-  min-width: 0;
+.device-identity-display strong {
+  overflow: hidden;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-identity-display.is-empty strong {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.device-edit-button {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.device-edit-button:hover,
+.device-edit-button:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--surface-strong);
+  color: var(--mint);
+}
+
+.device-edit-button:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
+.device-edit-button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.device-edit-button svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.device-identity-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
 }
 
 .device-identity-editor input {
@@ -2011,7 +2064,12 @@ input::placeholder {
   min-height: 38px;
 }
 
-.device-identity-editor button {
+.device-inline-edit-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.device-inline-edit-actions .row-action {
   min-height: 38px;
 }
 
@@ -2383,6 +2441,14 @@ body[data-theme="day"] .budisa-map-tiles {
     grid-column: 1 / -1;
   }
 
+  .device-identity-display {
+    flex-wrap: wrap;
+  }
+
+  .device-identity-display::before {
+    flex-basis: 100%;
+  }
+
   .status-table-head,
   .device-admin-head {
     display: none;
@@ -2605,6 +2671,7 @@ body[data-theme="day"] .budisa-map-tiles {
   .route-ledger-row .route-vehicle,
   .route-ledger-row .tip-events-cell,
   .status-device-row .status-device-identity,
+  .device-admin-row .device-identity-display,
   .device-admin-row .device-identity-editor,
   .device-admin-row .device-admin-actions {
     grid-column: 1 / -1;
