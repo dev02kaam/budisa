@@ -76,6 +76,7 @@ const state = {
   liveMap: null,
   liveTileLayer: null,
   liveMarkers: new Map(),
+  liveTipMarkers: [],
   liveTrailLayers: [],
   liveTrails: new Map(),
   liveSelectedImeis: new Set(storedLiveSelection || []),
@@ -200,9 +201,16 @@ function deviceIsMoving(device) {
   return Boolean(position && position.movement === true);
 }
 
+function deviceIsTipping(device) {
+  return device?.latestPosition?.tipperRaised === true;
+}
+
 function liveActivityPresentation(device) {
   if (device.connectionStatus !== 'online') {
     return { label: 'Sin enlace', className: 'is-offline' };
+  }
+  if (deviceIsTipping(device)) {
+    return { label: 'Basculando', className: 'is-tipping' };
   }
   if (deviceIsMoving(device)) {
     return { label: 'En movimiento', className: 'is-moving' };
@@ -805,6 +813,16 @@ function liveMarkerIcon(device) {
   });
 }
 
+function liveTipEventIcon() {
+  return L.divIcon({
+    className: '',
+    iconSize: [30, 34],
+    iconAnchor: [15, 30],
+    popupAnchor: [0, -26],
+    html: '<span class="live-tip-event-marker" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 9.4 15.8 4l2.8 6.2-11.9 5.4L4 9.4Zm3 7.2h12V19H7v-2.4Z"/></svg></span>'
+  });
+}
+
 function rememberLivePosition(device) {
   const position = device.latestPosition;
   if (!position) return;
@@ -823,6 +841,17 @@ function rememberLivePosition(device) {
 
 function selectedLiveDevices() {
   return activeFleet().filter((device) => state.liveSelectedImeis.has(device.imei));
+}
+
+function selectedLiveTipEvents() {
+  const selectedDevices = new Map(selectedLiveDevices().map((device) => [device.imei, device]));
+  return state.todayDays.flatMap((day) => {
+    const device = selectedDevices.get(day.imei);
+    if (!device || !Array.isArray(day.tipEvents)) return [];
+    return day.tipEvents
+      .filter((event) => Number.isFinite(Number(event.latitude)) && Number.isFinite(Number(event.longitude)))
+      .map((event) => ({ ...event, device }));
+  });
 }
 
 function liveMapBounds() {
@@ -873,6 +902,8 @@ function renderLiveMap() {
 
   state.liveMarkers.forEach((marker) => marker.remove());
   state.liveMarkers.clear();
+  state.liveTipMarkers.forEach((marker) => marker.remove());
+  state.liveTipMarkers = [];
   state.liveTrailLayers.forEach((layer) => layer.remove());
   state.liveTrailLayers = [];
 
@@ -893,11 +924,27 @@ function renderLiveMap() {
     const activity = liveActivityPresentation(device);
     const marker = L.marker([position.latitude, position.longitude], {
       icon: liveMarkerIcon(device),
-      zIndexOffset: activity.className === 'is-moving' ? 200 : 100
+      zIndexOffset: activity.className === 'is-tipping' ? 350 : activity.className === 'is-moving' ? 220 : 100,
+      title: `${deviceLicensePlate(device)}: ${activity.label}`
     })
       .addTo(state.liveMap)
       .bindPopup(`<strong class="map-popup-title">${escapeHtml(deviceLicensePlate(device))}</strong><span class="live-popup-status ${activity.className}">${escapeHtml(activity.label)}</span>`);
     state.liveMarkers.set(device.imei, marker);
+  });
+
+  selectedLiveTipEvents().forEach((event) => {
+    const latitude = Number(event.latitude);
+    const longitude = Number(event.longitude);
+    const licensePlate = deviceLicensePlate(event.device);
+    const marker = L.marker([latitude, longitude], {
+      icon: liveTipEventIcon(),
+      zIndexOffset: 260,
+      riseOnHover: true,
+      title: `${licensePlate}: Basculado`
+    })
+      .addTo(state.liveMap)
+      .bindPopup(`<strong class="map-popup-title">${escapeHtml(licensePlate)}</strong><span class="live-popup-status is-tipped">Basculado</span><time class="live-popup-event-time" datetime="${escapeHtml(event.timestamp)}">${escapeHtml(formatTime(event.timestamp))}</time>`);
+    state.liveTipMarkers.push(marker);
   });
 
   if (!state.liveMapHasFit && devicesWithPosition.length) {

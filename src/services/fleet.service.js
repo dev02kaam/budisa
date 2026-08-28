@@ -208,6 +208,7 @@ async function getFleet() {
             satellites: Number(latest.metadata?.satellites || 0),
             ignition: latest.metadata?.ignition ?? null,
             movement: latest.metadata?.movement ?? null,
+            tipperRaised: tipperState(latest)?.raised ?? null,
             positionAt: latest.positionAt || latest.receivedAt
           }
         : null

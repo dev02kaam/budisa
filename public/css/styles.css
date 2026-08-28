@@ -1355,6 +1355,12 @@ input::placeholder {
 .legend-dot.is-moving { background: #2dd4bf; }
 .live-option-status.is-stopped,
 .legend-dot.is-stopped { background: #70a8ff; }
+.live-option-status.is-tipping,
+.legend-dot.is-tipping { background: #f59e0b; }
+.legend-dot.is-tipped {
+  border: 2px solid #f59e0b;
+  background: transparent;
+}
 .live-option-status.is-offline { background: #69798d; }
 
 .live-options-empty {
@@ -1400,6 +1406,15 @@ input::placeholder {
 
 .live-popup-status.is-moving { color: #2dd4bf; }
 .live-popup-status.is-stopped { color: #70a8ff; }
+.live-popup-status.is-tipping,
+.live-popup-status.is-tipped { color: #f59e0b; }
+
+.live-popup-event-time {
+  display: block;
+  margin-top: 3px;
+  color: #6f8296;
+  font-size: 0.68rem;
+}
 
 .live-map-marker {
   position: relative;
@@ -1416,6 +1431,7 @@ input::placeholder {
 
 .live-map-marker.is-moving { background: #2dd4bf; }
 .live-map-marker.is-stopped { background: #70a8ff; }
+.live-map-marker.is-tipping { background: #f59e0b; }
 
 .live-map-marker i {
   position: absolute;
@@ -1436,13 +1452,39 @@ input::placeholder {
   fill: currentColor;
 }
 
-.live-map-marker.is-moving::after {
+.live-map-marker.is-moving::after,
+.live-map-marker.is-tipping::after {
   position: absolute;
   inset: -9px;
   border: 1px solid rgba(45, 212, 191, 0.66);
   border-radius: 50%;
   content: "";
   animation: markerPulse 2.4s ease-out infinite;
+}
+
+.live-map-marker.is-tipping::after {
+  border-color: rgba(245, 158, 11, 0.78);
+}
+
+.live-tip-event-marker {
+  position: relative;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 2px solid #f59e0b;
+  border-radius: 50% 50% 50% 5px;
+  background: #0b1723;
+  color: #fbbf24;
+  box-shadow: 0 8px 20px rgba(2, 7, 13, 0.46);
+  transform: rotate(-45deg);
+}
+
+.live-tip-event-marker svg {
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
+  transform: rotate(45deg);
 }
 
 .state-badge {
@@ -2628,7 +2670,9 @@ body[data-theme="day"] .budisa-map-tiles {
     right: 10px;
     bottom: 10px;
     left: 10px;
+    flex-wrap: wrap;
     justify-content: center;
+    row-gap: 7px;
   }
 
   .section-header,

@@ -322,6 +322,7 @@ async function run() {
     assert.equal(liveDevice.connectionStatus, 'online');
     assert.equal(liveDevice.gpsFix, true);
     assert.equal(liveDevice.latestPosition.satellites, 14);
+    assert.equal(liveDevice.latestPosition.tipperRaised, true);
     assert.equal('speedKph' in liveDevice.latestPosition, false);
 
     const filteredResponse = await fetch(`${baseUrl}/api/tracker?imei=356000000000001`, { headers: adminHeaders });
