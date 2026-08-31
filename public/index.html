@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Budisa | Control de flota</title>
+  <title>Budisa</title>
   <link rel="icon" href="/assets/logoyfavicon.png" type="image/png" />
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="/css/styles.css" />
@@ -259,6 +259,34 @@
               <span><i class="legend-dot is-offline"></i>Sin enlace</span>
             </div>
           </header>
+          <div class="status-filter-panel">
+            <div class="status-filter-layout">
+              <label class="status-search-control" for="statusSearch">
+                <span>Búsqueda general</span>
+                <span class="search-field">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 19.6-4.8-4.8a7.5 7.5 0 1 0-1.4 1.4l4.8 4.8 1.4-1.4ZM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z"/></svg>
+                  <input id="statusSearch" type="search" maxlength="80" placeholder="Buscar en todas las columnas" autocomplete="off" />
+                </span>
+              </label>
+              <form class="status-filter-builder" id="statusFilterForm">
+                <label for="statusFilterColumn"><span>Columna</span><select id="statusFilterColumn">
+                  <option value="vehicle">Vehículo</option>
+                  <option value="model">Modelo</option>
+                  <option value="approval">Autorización</option>
+                  <option value="connection">Conexión</option>
+                  <option value="gps">GPS</option>
+                  <option value="lastSeen">Último dato</option>
+                </select></label>
+                <label for="statusFilterValue"><span>Contiene</span><input id="statusFilterValue" maxlength="80" placeholder="Ej. En línea" autocomplete="off" /></label>
+                <button class="primary-button" id="statusAddFilter" type="submit" disabled>Añadir filtro</button>
+              </form>
+            </div>
+            <div class="status-filter-meta">
+              <div class="status-active-filters" id="statusActiveFilters" role="list" aria-label="Filtros activos"></div>
+              <button class="quiet-button" id="statusClearFilters" type="button" disabled>Limpiar todo</button>
+            </div>
+            <p class="status-filter-summary" id="statusFilterSummary" role="status" aria-live="polite">0 vehículos</p>
+          </div>
           <div class="status-table" id="statusTable"></div>
         </section>
       </section>
@@ -291,7 +319,7 @@
 
           <div class="devices-admin-workspace" id="devicesAdminWorkspace">
             <form class="device-create-form" id="deviceCreateForm">
-              <label for="deviceLicensePlateInput"><span>Matrícula</span><input id="deviceLicensePlateInput" name="licensePlate" maxlength="20" pattern="[A-Za-z0-9 -]{1,20}" placeholder="Ej. 1234 ABC" autocomplete="off" autocapitalize="characters" spellcheck="false" required /></label>
+              <label for="deviceLicensePlateInput"><span>Matrícula</span><input id="deviceLicensePlateInput" name="licensePlate" maxlength="20" pattern="[A-Za-z0-9 \-]{1,20}" placeholder="Ej. 1234 ABC" autocomplete="off" autocapitalize="characters" spellcheck="false" required /></label>
               <label for="deviceImeiInput"><span>IMEI del localizador</span><input id="deviceImeiInput" name="imei" inputmode="numeric" maxlength="15" pattern="[0-9]{15}" placeholder="15 dígitos" autocomplete="off" required /></label>
               <button class="primary-button" id="deviceCreateButton" type="submit">Añadir vehículo</button>
             </form>

@@ -57,6 +57,15 @@ const APPROVAL_META = {
   disabled: { label: 'Deshabilitado', className: 'is-disabled' }
 };
 
+const STATUS_FILTER_COLUMNS = {
+  vehicle: 'Vehículo',
+  model: 'Modelo',
+  approval: 'Autorización',
+  connection: 'Conexión',
+  gps: 'GPS',
+  lastSeen: 'Último dato'
+};
+
 const state = {
   theme: localStorage.getItem(STORAGE_KEYS.theme) || 'night',
   view: localStorage.getItem(STORAGE_KEYS.view) === 'dispositivos'
@@ -94,6 +103,9 @@ const state = {
   historyLoading: false,
   historyError: '',
   openTipFolders: new Set(),
+  statusFilters: [],
+  statusFilterSequence: 0,
+  statusFilterFingerprint: '',
   syncing: false,
   refreshing: false,
   refreshTick: 0,
@@ -157,6 +169,14 @@ const elements = {
   clearHistoryFilters: document.getElementById('clearHistoryFilters'),
   historyTotals: document.getElementById('historyTotals'),
   historyRouteList: document.getElementById('historyRouteList'),
+  statusSearch: document.getElementById('statusSearch'),
+  statusFilterForm: document.getElementById('statusFilterForm'),
+  statusFilterColumn: document.getElementById('statusFilterColumn'),
+  statusFilterValue: document.getElementById('statusFilterValue'),
+  statusAddFilter: document.getElementById('statusAddFilter'),
+  statusActiveFilters: document.getElementById('statusActiveFilters'),
+  statusClearFilters: document.getElementById('statusClearFilters'),
+  statusFilterSummary: document.getElementById('statusFilterSummary'),
   statusTable: document.getElementById('statusTable'),
   devicesAdminWorkspace: document.getElementById('devicesAdminWorkspace'),
   deviceCreateForm: document.getElementById('deviceCreateForm'),
@@ -220,6 +240,15 @@ function liveActivityPresentation(device) {
 
 function normalizeLicensePlate(value) {
   return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
+function normalizeFilterText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('es')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function normalizeCsvHeader(value) {
@@ -1058,21 +1087,89 @@ async function loadHistoryData({ force = false } = {}) {
   }
 }
 
+function statusDeviceValues(device) {
+  const approval = approvalPresentation(device.authorizationStatus);
+  const connection = connectionPresentation(device.connectionStatus);
+  const model = [device.manufacturer, device.model].filter(Boolean).join(' ') || 'Sin identificar';
+  const gps = device.gpsFix ? 'Fix GPS' : 'Sin fix';
+  return {
+    vehicle: `${deviceLicensePlate(device)} IMEI ${device.imei || ''}`,
+    model,
+    approval: approval.label,
+    connection: connection.label,
+    gps,
+    lastSeen: formatDateTime(device.lastSeenAt)
+  };
+}
+
+function vehicleCountLabel(count) {
+  return `${count} ${count === 1 ? 'vehículo' : 'vehículos'}`;
+}
+
+function renderStatusFilterControls(total, visible) {
+  const search = elements.statusSearch.value.trim();
+  const chips = [];
+  if (search) {
+    chips.push(`
+      <span class="status-filter-chip is-global" role="listitem">
+        <span class="status-filter-chip-copy"><strong>Todo:</strong> ${escapeHtml(search)}</span>
+        <button type="button" data-clear-status-search aria-label="Quitar búsqueda general: ${escapeHtml(search)}">×</button>
+      </span>
+    `);
+  }
+  state.statusFilters.forEach((filter) => {
+    const columnLabel = STATUS_FILTER_COLUMNS[filter.column] || filter.column;
+    chips.push(`
+      <span class="status-filter-chip" role="listitem">
+        <span class="status-filter-chip-copy"><strong>${escapeHtml(columnLabel)}:</strong> ${escapeHtml(filter.value)}</span>
+        <button type="button" data-remove-status-filter="${filter.id}" aria-label="Quitar filtro ${escapeHtml(columnLabel)}: ${escapeHtml(filter.value)}">×</button>
+      </span>
+    `);
+  });
+
+  const hasFilters = Boolean(search || state.statusFilters.length);
+  const filterFingerprint = JSON.stringify([search, state.statusFilters]);
+  if (filterFingerprint !== state.statusFilterFingerprint) {
+    elements.statusActiveFilters.innerHTML = chips.length
+      ? chips.join('')
+      : '<span class="status-filter-empty" role="listitem">Sin filtros activos</span>';
+    state.statusFilterFingerprint = filterFingerprint;
+  }
+  elements.statusClearFilters.disabled = !hasFilters;
+  elements.statusFilterSummary.textContent = hasFilters
+    ? `${visible} de ${vehicleCountLabel(total)}`
+    : vehicleCountLabel(total);
+}
+
 function renderStatus() {
+  const connectionOrder = { online: 0, stale: 1, waiting: 2, offline: 3, pending: 4, disabled: 5 };
+  const search = normalizeFilterText(elements.statusSearch.value);
+  const devices = state.fleet
+    .map((device) => ({ device, values: statusDeviceValues(device) }))
+    .filter(({ values }) => {
+      const matchesGlobalSearch = !search
+        || Object.values(values).some((value) => normalizeFilterText(value).includes(search));
+      const matchesColumnFilters = state.statusFilters.every((filter) => (
+        normalizeFilterText(values[filter.column]).includes(normalizeFilterText(filter.value))
+      ));
+      return matchesGlobalSearch && matchesColumnFilters;
+    })
+    .map(({ device }) => device)
+    .sort((left, right) => (
+      (connectionOrder[left.connectionStatus] ?? 9) - (connectionOrder[right.connectionStatus] ?? 9)
+      || deviceLicensePlate(left).localeCompare(deviceLicensePlate(right), 'es')
+    ));
+
+  renderStatusFilterControls(state.fleet.length, devices.length);
+
   if (!state.fleet.length) {
     elements.statusTable.innerHTML = `<div class="empty-state"><strong>No hay vehículos registrados</strong><p>Añade el primer IMEI desde la pestaña Vehículos.</p></div>`;
     return;
   }
 
-  const connectionOrder = { online: 0, stale: 1, waiting: 2, offline: 3, pending: 4, disabled: 5 };
-  const devices = state.fleet.slice().sort((left, right) => (
-    (connectionOrder[left.connectionStatus] ?? 9) - (connectionOrder[right.connectionStatus] ?? 9)
-    || deviceLicensePlate(left).localeCompare(deviceLicensePlate(right), 'es')
-  ));
-
   elements.statusTable.innerHTML = `
     <div class="status-table-head" aria-hidden="true"><span>Vehículo</span><span>Modelo</span><span>Autorización</span><span>Conexión</span><span>GPS</span><span>Último dato</span></div>
-    ${devices.map((device) => {
+    ${devices.length ? devices.map((device) => {
       const approval = approvalPresentation(device.authorizationStatus);
       const connection = connectionPresentation(device.connectionStatus);
       const fix = device.gpsFix
@@ -1088,8 +1185,41 @@ function renderStatus() {
           <time class="status-last-seen" data-label="Último dato">${escapeHtml(formatDateTime(device.lastSeenAt))}</time>
         </article>
       `;
-    }).join('')}
+    }).join('') : `<div class="empty-state"><strong>No hay coincidencias</strong><p>Quita algún filtro o prueba con otro término.</p></div>`}
   `;
+}
+
+function addStatusFilter(event) {
+  event.preventDefault();
+  const column = elements.statusFilterColumn.value;
+  const value = elements.statusFilterValue.value.trim().replace(/\s+/g, ' ');
+  if (!STATUS_FILTER_COLUMNS[column] || !value) {
+    elements.statusFilterValue.focus();
+    return;
+  }
+
+  const normalizedValue = normalizeFilterText(value);
+  const duplicate = state.statusFilters.some((filter) => (
+    filter.column === column && normalizeFilterText(filter.value) === normalizedValue
+  ));
+  if (!duplicate) {
+    state.statusFilterSequence += 1;
+    state.statusFilters.push({ id: state.statusFilterSequence, column, value });
+  }
+
+  elements.statusFilterValue.value = '';
+  elements.statusAddFilter.disabled = true;
+  renderStatus();
+  elements.statusFilterValue.focus();
+}
+
+function clearStatusFilters() {
+  elements.statusSearch.value = '';
+  elements.statusFilterValue.value = '';
+  elements.statusAddFilter.disabled = true;
+  state.statusFilters = [];
+  renderStatus();
+  elements.statusSearch.focus();
 }
 
 function renderPublicViews() {
@@ -1499,6 +1629,29 @@ function setupListeners() {
     if (folder.open) state.openTipFolders.add(folderKey);
     else state.openTipFolders.delete(folderKey);
   }, true);
+
+  elements.statusSearch.addEventListener('input', renderStatus);
+  elements.statusFilterValue.addEventListener('input', () => {
+    elements.statusAddFilter.disabled = !elements.statusFilterValue.value.trim();
+  });
+  elements.statusFilterForm.addEventListener('submit', addStatusFilter);
+  elements.statusClearFilters.addEventListener('click', clearStatusFilters);
+  elements.statusActiveFilters.addEventListener('click', (event) => {
+    const searchButton = event.target.closest('[data-clear-status-search]');
+    if (searchButton) {
+      elements.statusSearch.value = '';
+      renderStatus();
+      elements.statusSearch.focus();
+      return;
+    }
+
+    const filterButton = event.target.closest('[data-remove-status-filter]');
+    if (!filterButton) return;
+    const filterId = Number(filterButton.dataset.removeStatusFilter);
+    state.statusFilters = state.statusFilters.filter((filter) => filter.id !== filterId);
+    renderStatus();
+    elements.statusFilterValue.focus();
+  });
 
   elements.loginForm.addEventListener('submit', login);
   elements.logoutButton.addEventListener('click', logout);
