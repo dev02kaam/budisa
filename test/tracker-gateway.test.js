@@ -123,6 +123,16 @@ async function login(baseUrl) {
 }
 
 async function run() {
+  assert.equal(
+    buildCanonicalTrackerRequest({
+      keyId: 'gateway-v1',
+      timestamp: '1767225600',
+      nonce: 'nonce-12345678',
+      contentSha256: 'a'.repeat(64)
+    }),
+    `v1\n1767225600\nnonce-12345678\n${'a'.repeat(64)}`
+  );
+
   await connectDb();
   await registerTracker({
     imei: '356000000000001',
@@ -143,6 +153,45 @@ async function run() {
     });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { ok: true, accepted: 2 });
+
+    const invalidSignatureRequest = signedRequest(payload);
+    const legacyCanonical = [
+      'POST',
+      '/tracker',
+      invalidSignatureRequest.headers['X-Tracker-Key-Id'],
+      invalidSignatureRequest.headers['X-Tracker-Timestamp'],
+      invalidSignatureRequest.headers['X-Tracker-Nonce'],
+      invalidSignatureRequest.headers['X-Tracker-Content-SHA256']
+    ].join('\n');
+    const legacySignature = crypto
+      .createHmac('sha256', 'test-shared-secret')
+      .update(legacyCanonical)
+      .digest('hex');
+    invalidSignatureRequest.headers['X-Tracker-Signature'] = `v1=${legacySignature}`;
+    const authWarnings = [];
+    const originalConsoleWarn = console.warn;
+    console.warn = (event, details) => authWarnings.push({ event, details });
+    let invalidSignatureResponse;
+    try {
+      invalidSignatureResponse = await fetch(`${baseUrl}/tracker`, {
+        method: 'POST',
+        headers: invalidSignatureRequest.headers,
+        body: invalidSignatureRequest.body
+      });
+    } finally {
+      console.warn = originalConsoleWarn;
+    }
+    assert.equal(invalidSignatureResponse.status, 401);
+    assert.deepEqual(await invalidSignatureResponse.json(), { ok: false, code: 'INVALID_SIGNATURE' });
+    assert.deepEqual(authWarnings, [{
+      event: 'tracker_auth_failed',
+      details: {
+        code: 'HMAC_MISMATCH',
+        keyId: 'gateway-v1',
+        hasRawBody: true,
+        bodyLength: Buffer.byteLength(invalidSignatureRequest.body)
+      }
+    }]);
 
     const saved = await TrackerPoint.find().sort({ positionAt: 1 }).lean();
     assert.equal(saved.length, 2);

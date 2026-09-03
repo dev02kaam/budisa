@@ -95,6 +95,17 @@ X-Tracker-Signature: v1=<hmac-sha256>
 
 Budisa conserva el cuerpo original antes de parsear JSON, valida hash, HMAC, fecha y nonce, rechaza reenvíos y guarda cada `eventId` una sola vez. Una recepción completa responde:
 
+La cadena firmada es exactamente esta, sin una línea final adicional:
+
+```text
+v1
+TIMESTAMP
+NONCE
+SHA256_DEL_BODY
+```
+
+El hash y la firma se calculan sobre los bytes JSON enviados, no sobre una serialización posterior del objeto.
+
 ```json
 {
   "ok": true,
