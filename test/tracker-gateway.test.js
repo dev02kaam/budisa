@@ -395,6 +395,63 @@ async function run() {
     assert.equal(invalidRange.status, 400);
     assert.equal((await invalidRange.json()).code, 'INVALID_DATE_RANGE');
 
+    const routeResponse = await fetch(`${baseUrl}/api/tracker/route?imei=356000000000001&date=${today}`, { headers: adminHeaders });
+    const routeBody = await routeResponse.json();
+    assert.equal(routeResponse.status, 200);
+    assert.equal(routeBody.data.truncated, false);
+    assert.equal(routeBody.data.points.length, daysBody.data[0].pointCount);
+    assert.equal(routeBody.data.points[0].timestamp, filteredBody.data[0].positionAt);
+    assert.equal(routeBody.data.points[1].latitude, 40.4178);
+    for (const query of ['imei=bad&date=2026-03-29', 'imei=356000000000001', 'imei=356000000000001&date=2026-02-30']) {
+      const invalidRoute = await fetch(`${baseUrl}/api/tracker/route?${query}`, { headers: adminHeaders });
+      assert.equal(invalidRoute.status, 400);
+    }
+
+    // Route boundaries use Madrid civil days, including the 23- and 25-hour DST days.
+    const routeImei = '356000000000098';
+    for (const [date, start, end] of [
+      ['2026-03-29', '2026-03-28T23:00:00Z', '2026-03-29T22:00:00Z'],
+      ['2026-10-25', '2026-10-24T22:00:00Z', '2026-10-25T23:00:00Z']
+    ]) {
+      const startMs = Date.parse(start);
+      const endMs = Date.parse(end);
+      await TrackerPoint.insertMany([startMs - 1, startMs, endMs - 1, endMs].map((timestamp, index) => ({
+        eventId: `route-${date}-${index}`, deviceId: routeImei, positionAt: new Date(timestamp),
+        gps: { latitude: 40.4 + index / 1000, longitude: -3.7 }, metadata: { gpsValid: true }
+      })));
+      await TrackerPoint.insertMany([
+        { eventId: `route-${date}-no-fix`, deviceId: routeImei, positionAt: new Date(startMs + 1), gps: { latitude: 40.4, longitude: -3.7 }, metadata: { gpsValid: false } },
+        { eventId: `route-${date}-zero`, deviceId: routeImei, positionAt: new Date(startMs + 2), gps: { latitude: 0, longitude: 0 } },
+        { eventId: `route-${date}-other-device`, deviceId: '356000000000097', positionAt: new Date(startMs + 3), gps: { latitude: 40.4, longitude: -3.7 } }
+      ]);
+      const dayRoute = await fetch(`${baseUrl}/api/tracker/route?imei=${routeImei}&date=${date}`, { headers: adminHeaders }).then((result) => result.json());
+      assert.deepEqual(dayRoute.data.points.map((point) => point.timestamp), [new Date(startMs).toISOString(), new Date(endMs - 1).toISOString()]);
+    }
+    const emptyRoute = await fetch(`${baseUrl}/api/tracker/route?imei=${routeImei}&date=2026-01-01`, { headers: adminHeaders }).then((result) => result.json());
+    assert.deepEqual(emptyRoute.data.points, []);
+
+    // New GPS packets extend today's movement before the day has finished.
+    const movingImei = '356000000000099';
+    await registerTracker({ imei: movingImei, licensePlate: '9999 MOV' });
+    const movingPayload = buildPayload(movingImei);
+    const morning = Date.parse(`${today}T09:00:00Z`);
+    movingPayload.records.forEach((record, index) => {
+      record.timestampMs = morning + index * 60_000;
+      record.timestamp = new Date(record.timestampMs).toISOString();
+    });
+    const firstMovement = signedRequest(movingPayload);
+    assert.equal((await fetch(`${baseUrl}/tracker`, { method: 'POST', ...firstMovement })).status, 200);
+    const movementUrl = `${baseUrl}/api/tracker/days?imei=${movingImei}&from=${today}&to=${today}`;
+    const initialMovement = await fetch(movementUrl, { headers: adminHeaders }).then((result) => result.json());
+    assert.equal(initialMovement.data[0].movementSeconds, 60);
+    const nextRecord = { ...movingPayload.records[1], eventId: crypto.randomBytes(32).toString('hex'), index: 0, timestampMs: morning + 120_000, timestamp: new Date(morning + 120_000).toISOString() };
+    const nextMovement = signedRequest({ ...movingPayload, packet: { ...movingPayload.packet, packetId: crypto.randomBytes(32).toString('hex'), recordCount: 1 }, records: [nextRecord] });
+    assert.equal((await fetch(`${baseUrl}/tracker`, { method: 'POST', ...nextMovement })).status, 200);
+    const updatedMovement = await fetch(movementUrl, { headers: adminHeaders }).then((result) => result.json());
+    assert.equal(updatedMovement.data[0].movementSeconds, 120);
+    assert.equal(updatedMovement.data[0].pointCount, 3);
+    assert.equal(updatedMovement.data[0].tipEvents.length, 1);
+
     const logoutResponse = await fetch(`${baseUrl}/auth/logout`, {
       method: 'POST',
       headers: adminHeaders,
@@ -403,6 +460,7 @@ async function run() {
     assert.equal(logoutResponse.status, 200);
     const signedOutResponse = await fetch(`${baseUrl}/api/fleet`, { headers: adminHeaders });
     assert.equal(signedOutResponse.status, 401);
+    assert.equal((await fetch(`${baseUrl}/api/tracker/route?imei=${routeImei}&date=2026-03-29`, { headers: adminHeaders })).status, 401);
 
     console.log('ok - valida HMAC, registro pendiente, aprobacion, bloqueo e historico del gateway');
   } finally {

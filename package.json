@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test/teltonika.test.js && node test/tracker-gateway.test.js",
+    "test": "node test/teltonika.test.js && node test/tracker-gateway.test.js && node test/history.test.js",
     "tracker:register": "node scripts/register-tracker.js"
   },
   "dependencies": {

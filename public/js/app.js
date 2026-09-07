@@ -98,10 +98,19 @@ const state = {
   adminLoading: false,
   adminBusyImei: '',
   adminEditingImei: '',
-  daysFingerprint: '',
   historyLoaded: false,
   historyLoading: false,
   historyError: '',
+  historyRequest: null,
+  historyQuery: '',
+  historyFollowsToday: true,
+  historyUpdatedAt: null,
+  historyMarkup: '',
+  historyMap: null,
+  historyRouteLayers: null,
+  historyRoute: null,
+  historyRouteRequest: null,
+  historyRouteFingerprint: '',
   openTipFolders: new Set(),
   statusFilters: [],
   statusFilterSequence: 0,
@@ -169,6 +178,15 @@ const elements = {
   clearHistoryFilters: document.getElementById('clearHistoryFilters'),
   historyTotals: document.getElementById('historyTotals'),
   historyRouteList: document.getElementById('historyRouteList'),
+  historyUpdateStatus: document.getElementById('historyUpdateStatus'),
+  historyMapPanel: document.getElementById('historyMapPanel'),
+  historyMapTitle: document.getElementById('historyMapTitle'),
+  historyMapMeta: document.getElementById('historyMapMeta'),
+  historyMapStatus: document.getElementById('historyMapStatus'),
+  historyMap: document.getElementById('historyMap'),
+  fitHistoryMap: document.getElementById('fitHistoryMap'),
+  closeHistoryMap: document.getElementById('closeHistoryMap'),
+  retryHistoryMap: document.getElementById('retryHistoryMap'),
   statusSearch: document.getElementById('statusSearch'),
   statusFilterForm: document.getElementById('statusFilterForm'),
   statusFilterColumn: document.getElementById('statusFilterColumn'),
@@ -448,10 +466,11 @@ function statusBadge(presentation) {
 }
 
 function localDayKey(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date);
+  const value = (type) => parts.find((part) => part.type === type).value;
+  return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
 function setApiStatus(status, label) {
@@ -494,6 +513,13 @@ function showLogin(message = '') {
   elements.loginPassword.value = '';
   setLivePickerOpen(false);
   closeTipLocationDialog();
+  closeHistoryRoute({ restoreFocus: false });
+  state.historyRequest?.abort();
+  state.historyRequest = null;
+  state.historyLoading = false;
+  state.historyLoaded = false;
+  state.days = [];
+  state.historyUpdatedAt = null;
   window.setTimeout(() => elements.loginPassword.focus(), 0);
 }
 
@@ -502,7 +528,7 @@ function startRefreshTimer() {
   state.refreshTimer = window.setInterval(async () => {
     if (!state.syncing && !state.refreshing && state.authenticated) {
       state.refreshTick += 1;
-      const shouldRefresh = state.view === 'mapa' || state.refreshTick % 3 === 0;
+      const shouldRefresh = ['mapa', 'historico'].includes(state.view) || state.refreshTick % 3 === 0;
       if (!shouldRefresh) return;
       state.refreshing = true;
       try {
@@ -626,8 +652,9 @@ function setView(view) {
       renderLiveMap();
     }, 0);
   }
-  if (next === 'historico' && !state.historyLoaded) {
-    loadHistoryData();
+  if (next === 'historico') {
+    loadHistoryData({ force: true, silent: state.historyLoaded });
+    state.historyMap?.invalidateSize();
   }
   if (next === 'vehiculos' && !state.adminTrackers.length) {
     loadAdminTrackers();
@@ -1008,12 +1035,19 @@ function filteredDays() {
 }
 
 function renderHistory() {
-  if (state.historyLoading) {
-    elements.historyRouteList.innerHTML = `<div class="empty-state"><strong>Cargando jornadas…</strong><p>Consultando únicamente la actividad del intervalo seleccionado.</p></div>`;
+  const today = localDayKey();
+  const includesToday = (!elements.historyFrom.value || elements.historyFrom.value <= today)
+    && (!elements.historyTo.value || elements.historyTo.value >= today);
+  elements.historyUpdateStatus.classList.toggle('is-error', Boolean(state.historyError));
+  elements.historyUpdateStatus.textContent = state.historyError
+    ? `${state.historyLoaded ? 'No se ha podido actualizar; se conservan los últimos datos. ' : ''}${state.historyError} Se reintentará automáticamente.`
+    : `${includesToday ? 'La jornada de hoy se actualiza cada 5 s con los datos recibidos.' : 'Actualización automática cada 5 s.'}${state.historyUpdatedAt ? ` Última consulta: ${formatTime(state.historyUpdatedAt)}.` : ''}`;
+  if (state.historyLoading && !state.historyLoaded) {
+    setHistoryMarkup(`<div class="empty-state"><strong>Cargando jornadas…</strong><p>Consultando únicamente la actividad del intervalo seleccionado.</p></div>`);
     return;
   }
-  if (state.historyError) {
-    elements.historyRouteList.innerHTML = `<div class="empty-state"><strong>No se ha podido cargar el histórico</strong><p>${escapeHtml(state.historyError)}</p></div>`;
+  if (state.historyError && !state.historyLoaded) {
+    setHistoryMarkup(`<div class="empty-state"><strong>No se ha podido cargar el histórico</strong><p>${escapeHtml(state.historyError)}</p></div>`);
     return;
   }
 
@@ -1027,11 +1061,11 @@ function renderHistory() {
   `;
 
   if (!days.length) {
-    elements.historyRouteList.innerHTML = `<div class="empty-state"><strong>No hay jornadas para estos filtros</strong><p>Cuando lleguen posiciones GPS, Budisa agrupará automáticamente la actividad por vehículo y día.</p></div>`;
+    setHistoryMarkup(`<div class="empty-state"><strong>No hay jornadas para estos filtros</strong><p>Cuando lleguen posiciones GPS, Budisa agrupará automáticamente la actividad por vehículo y día.</p></div>`);
     return;
   }
 
-  elements.historyRouteList.innerHTML = days.map((day) => {
+  setHistoryMarkup(days.map((day) => {
     const licensePlate = day.licensePlate || state.fleet.find((device) => device.imei === day.imei)?.licensePlate || '';
     const tipEvents = Array.isArray(day.tipEvents) ? day.tipEvents : [];
     const folderKey = `${day.imei}|${day.date}`;
@@ -1049,41 +1083,196 @@ function renderHistory() {
     return `
       <article class="route-ledger-row">
         <div class="route-vehicle" data-label="Vehículo"><strong>${escapeHtml(licensePlate || 'Sin matrícula')}</strong></div>
-        <time data-label="Fecha" datetime="${escapeHtml(day.date)}">${escapeHtml(formatLongDate(day.date))}</time>
+        <div data-label="Fecha"><time datetime="${escapeHtml(day.date)}">${escapeHtml(formatLongDate(day.date))}</time>${day.date === today ? '<span class="history-day-status">Hoy · En curso</span>' : ''}</div>
         <strong class="movement-duration" data-label="Tiempo en movimiento">${escapeHtml(formatDuration(day.movementSeconds))}</strong>
         <div class="tip-events-cell" data-label="Basculaciones">${tipEventsContent}</div>
+        <div data-label="Recorrido"><button class="quiet-button history-map-button" type="button" data-open-route="${escapeHtml(folderKey)}" aria-controls="historyMapPanel" aria-expanded="${state.historyRoute?.key === folderKey}" aria-label="Ver mapa de ${escapeHtml(licensePlate || 'Sin matrícula')}, ${escapeHtml(formatLongDate(day.date))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4-6-2-7 3v17l7-3 6 2 7-3V1l-7 3ZM8 17.2l-4 1.7V6.3l4-1.7v12.6Zm6 1.4-4-1.3V4.4l4 1.3v12.9Zm6-2-4 1.7V5.8l4-1.7v12.5Z"/></svg>Ver mapa</button></div>
       </article>
     `;
-  }).join('');
+  }).join(''));
+}
+
+function setHistoryMarkup(markup) {
+  if (state.historyMarkup === markup) return;
+  const focused = elements.historyRouteList.contains(document.activeElement) ? document.activeElement : null;
+  const routeKey = focused?.dataset.openRoute;
+  const tipTimestamp = focused?.dataset.tipTimestamp;
+  const folderKey = focused?.closest('[data-tip-folder-key]')?.dataset.tipFolderKey;
+  state.historyMarkup = markup;
+  elements.historyRouteList.innerHTML = markup;
+  if (routeKey) elements.historyRouteList.querySelector(`[data-open-route="${CSS.escape(routeKey)}"]`)?.focus({ preventScroll: true });
+  else if (folderKey) {
+    const folder = elements.historyRouteList.querySelector(`[data-tip-folder-key="${CSS.escape(folderKey)}"]`);
+    const target = tipTimestamp ? folder?.querySelector(`[data-tip-timestamp="${CSS.escape(tipTimestamp)}"]`) : folder?.querySelector('summary');
+    target?.focus({ preventScroll: true });
+  }
 }
 
 function setDefaultHistoryRange() {
-  const to = new Date();
-  const from = new Date();
-  from.setDate(from.getDate() - 29);
-  elements.historyFrom.value = localDayKey(from);
-  elements.historyTo.value = localDayKey(to);
+  const today = localDayKey();
+  const from = new Date(`${today}T12:00:00Z`);
+  from.setUTCDate(from.getUTCDate() - 29);
+  elements.historyFrom.value = from.toISOString().slice(0, 10);
+  elements.historyTo.value = today;
+  state.historyFollowsToday = true;
 }
 
-async function loadHistoryData({ force = false } = {}) {
-  if (state.historyLoading || (state.historyLoaded && !force)) return;
-  state.historyLoading = true;
-  state.historyError = '';
-  renderHistory();
+async function loadHistoryData({ force = false, silent = false } = {}) {
+  if (state.historyFollowsToday && elements.historyTo.value !== localDayKey()) setDefaultHistoryRange();
   const query = new URLSearchParams({ limit: '1000' });
   if (elements.historyFrom.value) query.set('from', elements.historyFrom.value);
   if (elements.historyTo.value) query.set('to', elements.historyTo.value);
+  const queryKey = query.toString();
+  if (state.historyLoading && state.historyQuery === queryKey) return;
+  if (state.historyLoaded && !force && state.historyQuery === queryKey) return;
+  state.historyRequest?.abort();
+  const controller = new AbortController();
+  state.historyRequest = controller;
+  state.historyQuery = queryKey;
+  state.historyLoading = true;
+  state.historyError = '';
+  if (!silent) renderHistory();
 
   try {
-    const days = await requestJson(`/api/tracker/days?${query.toString()}`);
+    const days = await requestJson(`/api/tracker/days?${queryKey}`, { signal: controller.signal });
+    if (state.historyRequest !== controller) return;
     state.days = days || [];
-    state.daysFingerprint = state.days.map((day) => `${day.imei}:${day.date}:${day.movementSeconds}:${day.tipEvents?.length || 0}:${day.endAt}`).join('|');
     state.historyLoaded = true;
+    state.historyUpdatedAt = new Date();
+    if (state.historyRoute && state.view === 'historico') {
+      const selectedDay = state.days.find((day) => `${day.imei}|${day.date}` === state.historyRoute.key);
+      if (selectedDay) {
+        state.historyRoute.day = selectedDay;
+        loadHistoryRoute();
+      }
+    }
   } catch (error) {
+    if (controller.signal.aborted || state.historyRequest !== controller) return;
     state.historyError = error.message;
   } finally {
-    state.historyLoading = false;
-    renderHistory();
+    if (state.historyRequest === controller) {
+      state.historyLoading = false;
+      state.historyRequest = null;
+      renderHistory();
+    }
+  }
+}
+
+function fitHistoryRoute() {
+  const bounds = state.historyRouteLayers?.getBounds();
+  if (bounds?.isValid()) state.historyMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
+}
+
+function revealHistoryRoute() {
+  const topbar = document.querySelector('.topbar');
+  const topbarStyle = getComputedStyle(topbar);
+  const offset = topbarStyle.position === 'sticky'
+    ? parseFloat(topbarStyle.top) + topbar.offsetHeight
+    : document.querySelector('.sidebar').offsetHeight;
+  elements.historyMapPanel.style.scrollMarginTop = `${offset + 16}px`;
+  elements.historyMapPanel.scrollIntoView({ block: 'start' });
+}
+
+async function openHistoryRoute(button) {
+  const key = button.dataset.openRoute;
+  if (state.historyRoute?.key === key) {
+    closeHistoryRoute();
+    return;
+  }
+  const day = state.days.find((item) => `${item.imei}|${item.date}` === key);
+  if (!day) return;
+  state.historyRouteRequest?.abort();
+  state.historyRoute = { key, day };
+  state.historyRouteFingerprint = '';
+  state.historyRouteLayers?.clearLayers();
+  elements.historyMap.hidden = true;
+  elements.fitHistoryMap.disabled = true;
+  elements.historyMapPanel.hidden = false;
+  renderHistory();
+  elements.historyMapTitle.focus({ preventScroll: true });
+  revealHistoryRoute();
+  await loadHistoryRoute({ force: true, fit: true });
+  if (state.historyRoute?.key === key) revealHistoryRoute();
+}
+
+function closeHistoryRoute({ restoreFocus = true } = {}) {
+  const key = state.historyRoute?.key;
+  state.historyRouteRequest?.abort();
+  state.historyRouteRequest = null;
+  state.historyRoute = null;
+  state.historyRouteFingerprint = '';
+  elements.historyMapPanel.hidden = true;
+  renderHistory();
+  if (restoreFocus && key) elements.historyRouteList.querySelector(`[data-open-route="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
+}
+
+async function loadHistoryRoute({ force = false, fit = false } = {}) {
+  const selection = state.historyRoute;
+  if (!selection) return;
+  const { day } = selection;
+  const plate = day.licensePlate || state.fleet.find((device) => device.imei === day.imei)?.licensePlate || 'Sin matrícula';
+  elements.historyMapTitle.textContent = `${plate} · Recorrido`;
+  elements.historyMapMeta.textContent = `${formatLongDate(day.date)} · ${formatDuration(day.movementSeconds)} en movimiento · Último dato: ${formatTime(day.endAt)}`;
+  const fingerprint = `${day.pointCount}:${day.endAt}:${JSON.stringify(day.tipEvents || [])}`;
+  if (!force && (state.historyRouteRequest || state.historyRouteFingerprint === fingerprint)) return;
+  state.historyRouteRequest?.abort();
+  const controller = new AbortController();
+  state.historyRouteRequest = controller;
+  elements.historyMapStatus.textContent = state.historyRouteFingerprint ? 'Actualizando recorrido…' : 'Cargando recorrido…';
+  elements.retryHistoryMap.hidden = true;
+  elements.historyMapPanel.setAttribute('aria-busy', 'true');
+  try {
+    if (!window.L) throw new Error('No se ha podido iniciar el mapa. Recarga la página para intentarlo de nuevo.');
+    const query = new URLSearchParams({ imei: day.imei, date: day.date });
+    const route = await requestJson(`/api/tracker/route?${query}`, { signal: controller.signal });
+    if (state.historyRoute !== selection || controller.signal.aborted) return;
+    const points = route.points || [];
+    const firstDraw = !state.historyRouteFingerprint;
+    state.historyRouteFingerprint = fingerprint;
+    state.historyRouteLayers?.clearLayers();
+    elements.historyMap.hidden = !points.length;
+    elements.fitHistoryMap.disabled = !points.length;
+    if (!points.length) {
+      elements.historyMapStatus.textContent = 'No hay posiciones GPS válidas para mostrar esta jornada.';
+      return;
+    }
+    if (!state.historyMap) {
+      state.historyMap = L.map(elements.historyMap, { preferCanvas: true }).setView([40.2, -3.7], 6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        className: 'budisa-map-tiles', maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(state.historyMap);
+      state.historyRouteLayers = L.featureGroup().addTo(state.historyMap);
+    }
+    state.historyMap.invalidateSize();
+    const latlngs = points.map((point) => [point.latitude, point.longitude]);
+    if (latlngs.length > 1) {
+      L.polyline(latlngs, { color: '#0b1220', weight: 7, opacity: 0.7, interactive: false }).addTo(state.historyRouteLayers);
+      L.polyline(latlngs, { color: '#2dd4bf', weight: 4, opacity: 0.95, interactive: false }).addTo(state.historyRouteLayers);
+    }
+    const addEndpoint = (point, label, color) => L.circleMarker([point.latitude, point.longitude], {
+      radius: 7, color: '#0b1220', weight: 2, fillColor: color, fillOpacity: 1
+    }).bindTooltip(`${label} · ${escapeHtml(formatTime(point.timestamp))}`, { direction: 'top' }).addTo(state.historyRouteLayers);
+    addEndpoint(points[0], points.length === 1 ? 'Única posición' : 'Inicio', '#70a8ff');
+    if (points.length > 1) addEndpoint(points[points.length - 1], 'Última posición', '#62d8ba');
+    (day.tipEvents || []).forEach((event) => {
+      L.marker([event.latitude, event.longitude], { icon: tipLocationIcon() })
+        .bindTooltip(`Basculación · ${escapeHtml(formatTime(event.timestamp))}`)
+        .addTo(state.historyRouteLayers);
+    });
+    elements.historyMapStatus.textContent = route.truncated
+      ? 'Recorrido parcial: se muestran las primeras 100.000 posiciones de la jornada.'
+      : `${points.length === 1 ? 'Una posición recibida; todavía no hay un trayecto.' : `${points.length.toLocaleString('es-ES')} posiciones · Azul: inicio · Verde: última posición.`}${day.date === localDayKey() ? ' Se actualiza con los nuevos datos.' : ''}`;
+    if (fit || firstDraw) fitHistoryRoute();
+  } catch (error) {
+    if (controller.signal.aborted || state.historyRoute !== selection) return;
+    elements.historyMapStatus.textContent = `${state.historyRouteFingerprint ? 'Se conserva el último recorrido. ' : ''}No se ha podido cargar el recorrido. ${error.message}`;
+    elements.retryHistoryMap.hidden = false;
+  } finally {
+    if (state.historyRouteRequest === controller) {
+      state.historyRouteRequest = null;
+      elements.historyMapPanel.setAttribute('aria-busy', 'false');
+    }
   }
 }
 
@@ -1555,7 +1744,8 @@ async function refreshPublicData({ silent = false } = {}) {
     const [fleet, days, gateway] = await Promise.all([
       requestJson('/api/fleet'),
       requestJson(`/api/tracker/days?from=${encodeURIComponent(today)}&to=${encodeURIComponent(today)}&limit=1000`),
-      requestJson('/api/tracker/status').catch(() => null)
+      requestJson('/api/tracker/status').catch(() => null),
+      state.view === 'historico' ? loadHistoryData({ force: true, silent: true }) : Promise.resolve()
     ]);
     state.fleet = fleet || [];
     state.todayDays = days || [];
@@ -1609,16 +1799,24 @@ function setupListeners() {
 
   elements.historySearch.addEventListener('input', renderHistory);
   [elements.historyFrom, elements.historyTo].forEach((input) => input.addEventListener('change', () => {
+    state.historyFollowsToday = false;
+    closeHistoryRoute({ restoreFocus: false });
     state.historyLoaded = false;
     loadHistoryData();
   }));
   elements.clearHistoryFilters.addEventListener('click', () => {
     elements.historySearch.value = '';
     setDefaultHistoryRange();
+    closeHistoryRoute({ restoreFocus: false });
     state.historyLoaded = false;
     loadHistoryData();
   });
   elements.historyRouteList.addEventListener('click', (event) => {
+    const routeButton = event.target.closest('[data-open-route]');
+    if (routeButton) {
+      openHistoryRoute(routeButton);
+      return;
+    }
     const button = event.target.closest('[data-open-tip]');
     if (button) openTipLocation(button);
   });
@@ -1629,6 +1827,10 @@ function setupListeners() {
     if (folder.open) state.openTipFolders.add(folderKey);
     else state.openTipFolders.delete(folderKey);
   }, true);
+  elements.historyFilters.addEventListener('submit', (event) => event.preventDefault());
+  elements.closeHistoryMap.addEventListener('click', () => closeHistoryRoute());
+  elements.fitHistoryMap.addEventListener('click', fitHistoryRoute);
+  elements.retryHistoryMap.addEventListener('click', () => loadHistoryRoute({ force: true }));
 
   elements.statusSearch.addEventListener('input', renderStatus);
   elements.statusFilterValue.addEventListener('input', () => {
@@ -1687,6 +1889,7 @@ function setupListeners() {
   window.addEventListener('resize', () => {
     if (state.view === 'dashboard') state.fleetMap?.invalidateSize();
     if (state.view === 'mapa') state.liveMap?.invalidateSize();
+    if (state.view === 'historico' && state.historyRoute) state.historyMap?.invalidateSize();
     if (elements.tipLocationDialog.open) state.tipLocationMap?.invalidateSize();
   });
   document.addEventListener('click', (event) => {

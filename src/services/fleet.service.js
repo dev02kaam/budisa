@@ -343,10 +343,47 @@ async function getTrackerDays(filters = {}, limit = 500) {
     .slice(0, limit);
 }
 
+async function getTrackerDayRoute({ imei, date } = {}) {
+  if (typeof imei !== 'string' || !/^\d{15}$/.test(imei)) {
+    const error = new Error('Indica un IMEI válido para consultar el recorrido.');
+    error.code = 'INVALID_IMEI';
+    error.statusCode = 400;
+    throw error;
+  }
+  if (typeof date !== 'string' || !validDateKey(date)) {
+    throw badDateRange('Indica una jornada válida con formato AAAA-MM-DD.');
+  }
+
+  const maximumPoints = 100000;
+  const points = await TrackerPoint.find({
+    deviceId: imei,
+    positionAt: buildMadridDayRange({ from: date, to: date }),
+    'gps.latitude': { $ne: null },
+    'gps.longitude': { $ne: null },
+    'metadata.gpsValid': { $ne: false }
+  })
+    .select({ _id: 0, positionAt: 1, gps: 1 })
+    .sort({ positionAt: 1, receivedAt: 1 })
+    .limit(maximumPoints + 1)
+    .lean();
+
+  return {
+    imei,
+    date,
+    truncated: points.length > maximumPoints,
+    points: points.slice(0, maximumPoints).filter(validCoordinates).map((point) => ({
+      timestamp: point.positionAt,
+      latitude: point.gps.latitude,
+      longitude: point.gps.longitude
+    }))
+  };
+}
+
 module.exports = {
   connectionStatus,
   getFleet,
   getTrackerDays,
+  getTrackerDayRoute,
   getTrackerPoints,
   haversineDistanceMeters
 };

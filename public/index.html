@@ -217,7 +217,7 @@
           <div class="section-header">
             <div>
               <h2>Actividad por jornada</h2>
-                <p>Consulta tiempo en movimiento y basculaciones por jornada.</p>
+              <p>Consulta tiempo en movimiento, recorridos y basculaciones por jornada.</p>
             </div>
             <button class="quiet-button" id="clearHistoryFilters" type="button">Limpiar filtros</button>
           </div>
@@ -231,11 +231,30 @@
             <span><strong>0 min</strong> en movimiento</span>
             <span><strong>0</strong> basculaciones</span>
           </div>
+          <p class="history-update-status" id="historyUpdateStatus" role="status"></p>
+        </section>
+
+        <section class="history-map-panel" id="historyMapPanel" aria-labelledby="historyMapTitle" hidden>
+          <div class="section-header">
+            <div>
+              <h2 id="historyMapTitle" tabindex="-1">Recorrido de la jornada</h2>
+              <p id="historyMapMeta"></p>
+            </div>
+            <div class="history-map-actions">
+              <button class="quiet-button" id="fitHistoryMap" type="button" disabled>Ajustar recorrido</button>
+              <button class="quiet-button" id="closeHistoryMap" type="button">Cerrar mapa</button>
+            </div>
+          </div>
+          <div class="history-map-feedback" role="status">
+            <span id="historyMapStatus"></span>
+            <button class="quiet-button" id="retryHistoryMap" type="button" hidden>Reintentar</button>
+          </div>
+          <div class="history-route-map" id="historyMap" aria-label="Mapa del recorrido de la jornada" hidden></div>
         </section>
 
         <section class="route-ledger">
           <header class="route-ledger-head" aria-hidden="true">
-            <span>Vehículo</span><span>Fecha</span><span>Tiempo en movimiento</span><span>Basculaciones</span>
+            <span>Vehículo</span><span>Fecha</span><span>Tiempo en movimiento</span><span>Basculaciones</span><span>Recorrido</span>
           </header>
           <div id="historyRouteList"></div>
         </section>

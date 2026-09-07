@@ -126,7 +126,7 @@ Errores relevantes:
 
 - **Dashboard:** resumen ejecutivo de toda la flota activa, mapa compacto de últimas posiciones, métricas de actividad y búsqueda exclusiva por matrícula.
 - **Mapa en vivo:** mapa operativo dedicado con selección de uno, varios o todos los vehículos activos. Actualiza cada 5 segundos, conserva la selección y dibuja el movimiento recibido durante la sesión.
-- **Histórico:** filtro por matrícula y fechas; muestra matrícula, jornada, tiempo en movimiento y una carpeta desplegable de basculaciones. Cada coordenada abre un mapa puntual.
+- **Histórico:** filtro por matrícula y fechas; muestra matrícula, jornada, tiempo en movimiento y una carpeta desplegable de basculaciones. «Ver mapa» abre el recorrido de esa jornada, con inicio, última posición y basculaciones. La vista se actualiza cada 5 segundos mientras está abierta, incluida la jornada de hoy, marcada «En curso». El tiempo aumenta con los registros de movimiento recibidos del GPS; no es necesario esperar al cierre del día. El recorrido abierto también incorpora los puntos nuevos, conservando el zoom. Cada coordenada de una basculación sigue abriendo un mapa puntual.
 - **Estado:** tabla operativa con matrícula, IMEI, autorización, conexión, fix GPS y última recepción.
 - **Vehículos:** detección automática de nuevos IMEIs, alta individual, importación CSV, cambio de matrícula, aprobación, deshabilitación y reactivación dentro de la sesión privada. Durante cada cambio se muestra un loader hasta que todas las vistas quedan sincronizadas.
 
@@ -140,6 +140,7 @@ El mapa usa Leaflet sobre cartografía OpenStreetMap con un tratamiento visual p
 - `GET /api/fleet`: estado actual agregado de todos los dispositivos.
 - `GET /api/tracker`: posiciones GPS filtradas por `imei`, `from` y `to`.
 - `GET /api/tracker/days`: tiempo en movimiento y basculaciones agrupados por matrícula y día.
+- `GET /api/tracker/route?imei=...&date=AAAA-MM-DD`: posiciones ordenadas del recorrido de un vehículo en una jornada de Madrid, incluidos los cambios de horario. Devuelve `points` y `truncated` (límite de 100.000 posiciones, indicado en la interfaz cuando se supera).
 - `GET /api/tracker/status`: estado no sensible de la integración.
 - `GET/POST /api/trackers`: listado y alta protegidos del registro.
 - `POST /api/trackers/import`: alta o actualización masiva de hasta 250 vehículos.

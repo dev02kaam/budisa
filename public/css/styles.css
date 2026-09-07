@@ -759,6 +759,7 @@ body.is-syncing {
 .fleet-map-panel,
 .fleet-now-panel,
 .history-filter-panel,
+.history-map-panel,
 .route-ledger,
 .status-overview,
 .devices-admin-panel {
@@ -1572,10 +1573,72 @@ input::placeholder {
   margin-top: 18px;
 }
 
+.history-update-status {
+  margin: 0;
+  padding: 0 20px 16px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.history-update-status.is-error {
+  color: var(--coral);
+}
+
+.history-map-panel {
+  margin-top: 18px;
+  scroll-margin-top: 20px;
+}
+
+.history-map-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.history-map-feedback {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 20px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.history-route-map {
+  height: clamp(300px, 52vh, 560px);
+  background: var(--surface-soft);
+}
+
+.history-map-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.history-map-button[aria-expanded="true"] {
+  border-color: var(--mint);
+  color: var(--mint);
+}
+
+.history-map-button svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.history-day-status {
+  display: block;
+  margin-top: 6px;
+  color: var(--mint);
+  font-size: 0.74rem;
+}
+
 .route-ledger-head,
 .route-ledger-row {
   display: grid;
-  grid-template-columns: minmax(140px, 0.8fr) minmax(180px, 1fr) minmax(170px, 0.85fr) minmax(280px, 1.5fr);
+  grid-template-columns: minmax(110px, 0.8fr) minmax(160px, 1.2fr) minmax(130px, 0.85fr) minmax(160px, 1fr) 110px;
   align-items: start;
   gap: 18px;
 }
@@ -2569,6 +2632,10 @@ body[data-theme="day"] .budisa-map-tiles {
     grid-column: 1 / -1;
   }
 
+  .history-map-panel .section-header {
+    flex-wrap: wrap;
+  }
+
   .route-ledger-row > *::before,
   .status-device-row > *::before,
   .device-admin-row > *::before {
@@ -2614,6 +2681,11 @@ body[data-theme="day"] .budisa-map-tiles {
 }
 
 @media (max-width: 700px) {
+  .history-map-button,
+  .history-map-actions .quiet-button {
+    min-height: 44px;
+  }
+
   .login-panel {
     width: calc(100% - 24px);
     padding: 34px 24px;

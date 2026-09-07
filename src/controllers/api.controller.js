@@ -61,6 +61,15 @@ async function trackerStatus(req, res, next) {
   }
 }
 
+async function trackerDayRoute(req, res, next) {
+  try {
+    const route = await fleetService.getTrackerDayRoute({ imei: req.query.imei, date: req.query.date });
+    res.json({ ok: true, data: route });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function trackers(req, res, next) {
   try {
     res.json({ ok: true, data: await listTrackers() });
@@ -134,6 +143,7 @@ module.exports = {
   registerTrackerDevice,
   tracker,
   trackerDays,
+  trackerDayRoute,
   trackerStatus,
   trackers,
   updateTrackerDevice
