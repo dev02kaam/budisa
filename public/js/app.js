@@ -718,7 +718,7 @@ function renderFleetList() {
 function ensureFleetMap() {
   if (state.fleetMap || !window.L) return;
   state.fleetMap = L.map(elements.fleetMap, { zoomControl: true }).setView([40.2, -3.7], 6);
-  state.fleetTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  state.fleetTileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     className: 'budisa-map-tiles',
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -850,7 +850,7 @@ function renderLiveVehicleOptions() {
 function ensureLiveMap() {
   if (state.liveMap || !window.L) return;
   state.liveMap = L.map(elements.liveMap, { zoomControl: true }).setView([40.2, -3.7], 6);
-  state.liveTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  state.liveTileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     className: 'budisa-map-tiles',
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -1238,7 +1238,7 @@ async function loadHistoryRoute({ force = false, fit = false } = {}) {
     }
     if (!state.historyMap) {
       state.historyMap = L.map(elements.historyMap, { preferCanvas: true }).setView([40.2, -3.7], 6);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         className: 'budisa-map-tiles', maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
       }).addTo(state.historyMap);
@@ -1710,7 +1710,7 @@ function tipLocationIcon() {
 function ensureTipLocationMap() {
   if (state.tipLocationMap || !window.L) return;
   state.tipLocationMap = L.map(elements.tipLocationMap).setView([40.2, -3.7], 6);
-  state.tipLocationTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  state.tipLocationTileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     className: 'budisa-map-tiles',
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

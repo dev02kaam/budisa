@@ -16,12 +16,14 @@ const app = express();
 app.disable('x-powered-by');
 if (config.nodeEnv === 'production') app.set('trust proxy', 1);
 app.use(helmet({
+  // OpenStreetMap requires a Referer; cross-origin requests only share the origin.
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'blob:', 'https://*.tile.openstreetmap.org'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://tile.openstreetmap.org'],
       connectSrc: ["'self'"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
