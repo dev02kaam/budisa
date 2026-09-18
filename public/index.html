@@ -196,12 +196,13 @@
             </button>
           </div>
 
-          <div class="live-map-legend" aria-label="Leyenda de actividad">
-            <span><i class="legend-dot is-moving"></i>En movimiento</span>
-            <span><i class="legend-dot is-stopped"></i>Detenido</span>
-            <span><i class="legend-dot is-tipping"></i>Basculando</span>
-            <span><i class="legend-dot is-tipped"></i>Basculado</span>
-            <span><i class="legend-dot is-offline"></i>Sin enlace</span>
+          <p class="live-window-status" id="liveWindowStatus" role="status">Recorrido y basculaciones: última hora.</p>
+          <div class="live-map-legend activity-map-legend" aria-label="Leyenda del recorrido y basculaciones">
+            <span><i class="legend-line is-moving"></i>Movimiento</span>
+            <span><i class="legend-line is-stopped"></i>Parada</span>
+            <span><i class="legend-line is-unknown"></i>Sin dato</span>
+            <span><i class="legend-dot is-start"></i>Inicio basculación</span>
+            <span><i class="legend-dot is-end"></i>Fin basculación</span>
           </div>
 
           <div class="map-empty live-map-empty" id="liveMapEmpty">
@@ -219,7 +220,10 @@
               <h2>Actividad por jornada</h2>
               <p>Consulta tiempo en movimiento, recorridos y basculaciones por jornada.</p>
             </div>
-            <button class="quiet-button" id="clearHistoryFilters" type="button">Limpiar filtros</button>
+            <div class="history-map-actions">
+              <button class="quiet-button" id="exportHistoryPdf" type="button" disabled>Exportar tabla a PDF</button>
+              <button class="quiet-button" id="clearHistoryFilters" type="button">Limpiar filtros</button>
+            </div>
           </div>
           <form class="history-filters" id="historyFilters">
             <label><span>Matrícula</span><input id="historySearch" type="search" placeholder="Buscar matrícula" autocomplete="off" /></label>
@@ -232,6 +236,7 @@
             <span><strong>0</strong> basculaciones</span>
           </div>
           <p class="history-update-status" id="historyUpdateStatus" role="status"></p>
+          <p class="history-export-status" id="historyExportStatus" role="status"></p>
         </section>
 
         <section class="history-map-panel" id="historyMapPanel" aria-labelledby="historyMapTitle" hidden>
@@ -249,12 +254,19 @@
             <span id="historyMapStatus"></span>
             <button class="quiet-button" id="retryHistoryMap" type="button" hidden>Reintentar</button>
           </div>
+          <div class="history-route-legend activity-map-legend" aria-label="Leyenda del recorrido y basculaciones">
+            <span><i class="legend-line is-moving"></i>Movimiento</span>
+            <span><i class="legend-line is-stopped"></i>Parada</span>
+            <span><i class="legend-line is-unknown"></i>Sin dato</span>
+            <span><i class="legend-dot is-start"></i>Inicio basculación</span>
+            <span><i class="legend-dot is-end"></i>Fin basculación</span>
+          </div>
           <div class="history-route-map" id="historyMap" aria-label="Mapa del recorrido de la jornada" hidden></div>
         </section>
 
         <section class="route-ledger">
           <header class="route-ledger-head" aria-hidden="true">
-            <span>Vehículo</span><span>Fecha</span><span>Tiempo en movimiento</span><span>Basculaciones</span><span>Recorrido</span>
+            <span>Vehículo</span><span>Fecha</span><span>Tiempo en movimiento</span><span>Basculaciones</span><span>Mapa / PDF</span>
           </header>
           <div id="historyRouteList"></div>
         </section>

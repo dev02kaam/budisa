@@ -6,6 +6,8 @@ const router = express.Router();
 router.get('/fleet', api.fleet);
 router.get('/tracker', api.tracker);
 router.get('/tracker/days', api.trackerDays);
+router.get('/tracker/live', api.liveActivity);
+router.post('/tracker/report', api.exportReport);
 router.get('/tracker/route', api.trackerDayRoute);
 router.get('/tracker/status', api.trackerStatus);
 router.get('/trackers', api.trackers);

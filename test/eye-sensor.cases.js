@@ -45,7 +45,7 @@ module.exports = async function checkEyeSensor({ baseUrl, adminHeaders, buildPay
   assert.equal(day.tipEvents.length, 1);
   assert.deepEqual(day.tipEvents[0], {
     timestamp: '2026-09-18T08:43:53.000Z', endAt: null, durationSeconds: null,
-    status: 'active', latitude: null, longitude: null
+    status: 'active', latitude: null, longitude: null, endLatitude: null, endLongitude: null
   });
   await send(imei, [
     { time: '2026-09-18T08:43:58Z' },
@@ -74,6 +74,8 @@ module.exports = async function checkEyeSensor({ baseUrl, adminHeaders, buildPay
   assert.equal(day.tipEvents[0].durationSeconds, 61);
   // A GPS fix only at the end must not invent a location for the start.
   assert.equal(day.tipEvents[0].latitude, null);
+  assert.equal(day.tipEvents[0].endLatitude, 40.4);
+  assert.equal(day.tipEvents[0].endLongitude, -3.7);
   assert.equal(day.gpsPointCount, 1);
 
   // Close arrives before start: reconstruction uses device time and stays idempotent.

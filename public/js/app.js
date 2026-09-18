@@ -87,7 +87,9 @@ const state = {
   liveMarkers: new Map(),
   liveTipMarkers: [],
   liveTrailLayers: [],
-  liveTrails: new Map(),
+  liveActivity: null,
+  liveActivityRequest: null,
+  liveActivityError: '',
   liveSelectedImeis: new Set(storedLiveSelection || []),
   liveSelectionHydrated: storedLiveSelection !== null,
   liveMapHasFit: false,
@@ -106,6 +108,7 @@ const state = {
   historyFollowsToday: true,
   historyUpdatedAt: null,
   historyMarkup: '',
+  historyExporting: false,
   historyMap: null,
   historyRouteLayers: null,
   historyRoute: null,
@@ -157,6 +160,7 @@ const elements = {
   fleetMap: document.getElementById('fleetMap'),
   fleetMapEmpty: document.getElementById('fleetMapEmpty'),
   liveMap: document.getElementById('liveMap'),
+  liveWindowStatus: document.getElementById('liveWindowStatus'),
   liveMapEmpty: document.getElementById('liveMapEmpty'),
   liveMapEmptyTitle: document.getElementById('liveMapEmptyTitle'),
   liveMapEmptyMessage: document.getElementById('liveMapEmptyMessage'),
@@ -176,6 +180,8 @@ const elements = {
   historyTo: document.getElementById('historyTo'),
   historyFilters: document.getElementById('historyFilters'),
   clearHistoryFilters: document.getElementById('clearHistoryFilters'),
+  exportHistoryPdf: document.getElementById('exportHistoryPdf'),
+  historyExportStatus: document.getElementById('historyExportStatus'),
   historyTotals: document.getElementById('historyTotals'),
   historyRouteList: document.getElementById('historyRouteList'),
   historyUpdateStatus: document.getElementById('historyUpdateStatus'),
@@ -501,6 +507,9 @@ function stopRefreshTimer() {
 
 function showLogin(message = '') {
   stopRefreshTimer();
+  state.liveActivityRequest?.abort();
+  state.liveActivityRequest = null;
+  state.liveActivity = null;
   state.authenticated = false;
   state.sessionUser = '';
   state.adminEditingImei = '';
@@ -646,6 +655,7 @@ function setView(view) {
     }, 0);
   }
   if (next === 'mapa') {
+    loadLiveActivity();
     setTimeout(() => {
       ensureLiveMap();
       state.liveMap?.invalidateSize();
@@ -826,7 +836,7 @@ function renderLiveVehicleOptions() {
   elements.liveSelectedCount.textContent = `${count} ${count === 1 ? 'seleccionado' : 'seleccionados'}`;
   elements.liveSelectAll.disabled = !devices.length || count === devices.length;
   elements.liveClearSelection.disabled = count === 0;
-  elements.fitLiveMapBtn.disabled = !devices.some((device) => state.liveSelectedImeis.has(device.imei) && device.latestPosition);
+  elements.fitLiveMapBtn.disabled = !liveMapBounds();
 
   if (!devices.length) {
     elements.liveVehicleOptions.innerHTML = '<div class="live-options-empty">Todavía no hay vehículos activos.</div>';
@@ -869,30 +879,75 @@ function liveMarkerIcon(device) {
   });
 }
 
-function liveTipEventIcon() {
+function liveTipEventIcon(phase = 'start') {
   return L.divIcon({
     className: '',
     iconSize: [30, 34],
-    iconAnchor: [15, 30],
+    iconAnchor: phase === 'end' ? [0, 30] : [30, 30],
     popupAnchor: [0, -26],
-    html: '<span class="live-tip-event-marker" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 9.4 15.8 4l2.8 6.2-11.9 5.4L4 9.4Zm3 7.2h12V19H7v-2.4Z"/></svg></span>'
+    html: `<span class="live-tip-event-marker is-${phase}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="${phase === 'end' ? 'M11 3h2v13l4-4 1.4 1.4L12 20l-6.4-6.6L7 12l4 4V3Z' : 'M11 21h2V8l4 4 1.4-1.4L12 4l-6.4 6.6L7 12l4-4v13Z'}"/></svg></span>`
   });
 }
 
-function rememberLivePosition(device) {
-  const position = device.latestPosition;
-  if (!position) return;
-  const latitude = Number(position.latitude);
-  const longitude = Number(position.longitude);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
-
-  const trail = state.liveTrails.get(device.imei) || [];
-  const previous = trail[trail.length - 1];
-  if (!previous || previous[0] !== latitude || previous[1] !== longitude) {
-    trail.push([latitude, longitude]);
-    if (trail.length > 160) trail.splice(0, trail.length - 160);
-    state.liveTrails.set(device.imei, trail);
+async function loadLiveActivity() {
+  if (!state.authenticated || state.liveActivityRequest) return;
+  const controller = new AbortController();
+  state.liveActivityRequest = controller;
+  try {
+    const activity = await requestJson('/api/tracker/live', { signal: controller.signal });
+    if (controller.signal.aborted) return;
+    state.liveActivity = activity;
+    state.liveActivityError = '';
+  } catch (error) {
+    if (!controller.signal.aborted) state.liveActivityError = 'No se ha podido actualizar el recorrido.';
+  } finally {
+    if (state.liveActivityRequest === controller) state.liveActivityRequest = null;
+    if (state.view === 'mapa' && state.authenticated) renderLiveMap();
   }
+}
+
+const ROUTE_STYLES = {
+  moving: { color: '#60a5fa', label: 'En movimiento' },
+  stopped: { color: '#f4b942', label: 'Detenido' },
+  unknown: { color: '#94a3b8', label: 'Sin dato de movimiento' }
+};
+
+function routeSegments(points) {
+  const segments = [];
+  let segment = null;
+  for (let index = 1; index < points.length; index++) {
+    const previous = points[index - 1];
+    const current = points[index];
+    if (current.breakBefore || !tipEventHasLocation(previous) || !tipEventHasLocation(current)) { segment = null; continue; }
+    const kind = previous.movement === true ? 'moving' : previous.movement === false ? 'stopped' : 'unknown';
+    if (!segment || segment.kind !== kind) {
+      segment = { kind, coordinates: [[previous.latitude, previous.longitude]] };
+      segments.push(segment);
+    }
+    segment.coordinates.push([current.latitude, current.longitude]);
+  }
+  return segments;
+}
+
+function drawActivityRoute(points, target) {
+  return routeSegments(points).flatMap((segment) => {
+    const style = ROUTE_STYLES[segment.kind];
+    return [
+      L.polyline(segment.coordinates, { color: '#07111c', weight: 8, opacity: 0.6, interactive: false }).addTo(target),
+      L.polyline(segment.coordinates, { color: style.color, weight: 5, opacity: 0.95, lineCap: 'round', dashArray: segment.kind === 'unknown' ? '5 6' : null })
+        .bindTooltip(style.label).addTo(target)
+    ];
+  });
+}
+
+function liveWindowVehicles(now = Date.now()) {
+  const from = now - 60 * 60 * 1000;
+  const recent = (point) => {
+    const time = new Date(point.timestamp).getTime();
+    return time >= from && time <= now;
+  };
+  return (state.liveActivity?.vehicles || []).filter((vehicle) => state.liveSelectedImeis.has(vehicle.imei))
+    .map((vehicle) => ({ ...vehicle, points: vehicle.points.filter(recent), markers: vehicle.markers.filter(recent) }));
 }
 
 function selectedLiveDevices() {
@@ -901,20 +956,25 @@ function selectedLiveDevices() {
 
 function selectedLiveTipEvents() {
   const selectedDevices = new Map(selectedLiveDevices().map((device) => [device.imei, device]));
-  return state.todayDays.flatMap((day) => {
-    const device = selectedDevices.get(day.imei);
-    if (!device || !Array.isArray(day.tipEvents)) return [];
-    return day.tipEvents
-      .filter((event) => Number.isFinite(Number(event.latitude)) && Number.isFinite(Number(event.longitude)))
+  return liveWindowVehicles().flatMap((vehicle) => {
+    const device = selectedDevices.get(vehicle.imei);
+    if (!device) return [];
+    return vehicle.markers
+      .filter(tipEventHasLocation)
       .map((event) => ({ ...event, device }));
   });
 }
 
 function liveMapBounds() {
+  if (!window.L) return null;
   const positions = selectedLiveDevices()
     .map((device) => device.latestPosition)
     .filter(Boolean)
     .map((position) => [position.latitude, position.longitude]);
+  liveWindowVehicles().forEach((vehicle) => {
+    vehicle.points.forEach((point) => positions.push([point.latitude, point.longitude]));
+    vehicle.markers.filter(tipEventHasLocation).forEach((point) => positions.push([point.latitude, point.longitude]));
+  });
   return positions.length ? L.latLngBounds(positions) : null;
 }
 
@@ -943,7 +1003,7 @@ function renderLiveMapEmpty(selectedDevices, devicesWithPosition) {
     elements.liveMapEmpty.hidden = false;
     return;
   }
-  if (!devicesWithPosition.length) {
+  if (!devicesWithPosition.length && !liveWindowVehicles().some((vehicle) => vehicle.points.length || vehicle.markers.some(tipEventHasLocation))) {
     elements.liveMapEmptyTitle.textContent = 'Esperando la primera posición';
     elements.liveMapEmptyMessage.textContent = 'Los vehículos elegidos aparecerán en cuanto envíen un punto GPS válido.';
     elements.liveMapEmpty.hidden = false;
@@ -964,18 +1024,13 @@ function renderLiveMap() {
   state.liveTrailLayers = [];
 
   const selectedDevices = selectedLiveDevices();
+  elements.liveWindowStatus.textContent = `Recorrido y basculaciones: última hora.${state.liveActivityError ? ` ${state.liveActivityError}` : state.liveActivity?.truncated ? ' Vista parcial por volumen de datos.' : ''}`;
   const devicesWithPosition = selectedDevices.filter((device) => device.latestPosition);
   renderLiveMapEmpty(selectedDevices, devicesWithPosition);
 
-  devicesWithPosition.forEach((device) => {
-    rememberLivePosition(device);
-    const trail = state.liveTrails.get(device.imei) || [];
-    if (trail.length > 1) {
-      const casing = L.polyline(trail, { color: '#07111c', weight: 7, opacity: 0.5, interactive: false }).addTo(state.liveMap);
-      const route = L.polyline(trail, { color: '#2dd4bf', weight: 3, opacity: 0.92, interactive: false }).addTo(state.liveMap);
-      state.liveTrailLayers.push(casing, route);
-    }
+  liveWindowVehicles().forEach((vehicle) => state.liveTrailLayers.push(...drawActivityRoute(vehicle.points, state.liveMap)));
 
+  devicesWithPosition.forEach((device) => {
     const position = device.latestPosition;
     const activity = liveActivityPresentation(device);
     const marker = L.marker([position.latitude, position.longitude], {
@@ -992,18 +1047,21 @@ function renderLiveMap() {
     const latitude = Number(event.latitude);
     const longitude = Number(event.longitude);
     const licensePlate = deviceLicensePlate(event.device);
+    const label = event.phase === 'end' ? 'Fin de basculación' : 'Inicio de basculación';
     const marker = L.marker([latitude, longitude], {
-      icon: liveTipEventIcon(),
+      icon: liveTipEventIcon(event.phase),
       zIndexOffset: 260,
       riseOnHover: true,
-      title: `${licensePlate}: Basculado`
+      title: `${licensePlate}: ${label}`
     })
       .addTo(state.liveMap)
-      .bindPopup(`<strong class="map-popup-title">${escapeHtml(licensePlate)}</strong><span class="live-popup-status is-tipped">Basculado</span><time class="live-popup-event-time" datetime="${escapeHtml(event.timestamp)}">${escapeHtml(formatTime(event.timestamp))}</time>`);
+      .bindPopup(`<strong class="map-popup-title">${escapeHtml(licensePlate)}</strong><span class="live-popup-status is-${event.phase}">${label}</span><time class="live-popup-event-time" datetime="${escapeHtml(event.timestamp)}">${escapeHtml(formatTipTime(event.timestamp))}</time>`);
     state.liveTipMarkers.push(marker);
   });
 
-  if (!state.liveMapHasFit && devicesWithPosition.length) {
+  const hasBounds = Boolean(liveMapBounds());
+  elements.fitLiveMapBtn.disabled = !hasBounds;
+  if (!state.liveMapHasFit && hasBounds && (!state.liveActivityRequest || state.liveActivity)) {
     fitLiveMap();
   } else if (devicesWithPosition.length === 1) {
     const position = devicesWithPosition[0].latestPosition;
@@ -1055,21 +1113,52 @@ function renderTipEvent(event, licensePlate) {
   const seconds = Math.max(0, Math.round(Number(event.durationSeconds) || 0));
   const duration = seconds < 60 ? `${seconds} s` : `${formatDuration(seconds)} ${seconds % 60} s`;
   const endOnAnotherDay = closed && localDayKey(new Date(event.timestamp)) !== localDayKey(new Date(event.endAt));
-  const location = tipEventHasLocation(event)
-    ? `<button class="tip-event-location" type="button" data-open-tip data-tip-latitude="${escapeHtml(event.latitude)}" data-tip-longitude="${escapeHtml(event.longitude)}" data-tip-timestamp="${escapeHtml(event.timestamp)}" data-tip-plate="${escapeHtml(licensePlate)}" aria-label="Ver ubicación del inicio de basculación de ${escapeHtml(licensePlate)}, ${escapeHtml(formatTipTime(event.timestamp))}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.3 7 13 7 13s7-7.7 7-13a7 7 0 0 0-7-7Zm0 10.2A3.2 3.2 0 1 1 12 5.8a3.2 3.2 0 0 1 0 6.4Z"/></svg>
-        Ver ubicación · ${Number(event.latitude).toFixed(5)}, ${Number(event.longitude).toFixed(5)}
-      </button>`
-    : '<span class="tip-event-location">Sin ubicación</span>';
+  const phaseMarkup = (phase, timestamp, latitude, longitude) => {
+    const label = phase === 'end' ? 'Fin' : 'Inicio';
+    const located = tipEventHasLocation({ latitude, longitude });
+    const time = `<span class="tip-phase-label is-${phase}">${label}</span> <time datetime="${escapeHtml(timestamp)}">${escapeHtml(formatTipTime(timestamp, phase === 'end' && endOnAnotherDay))}</time>`;
+    return `<div class="tip-event-phase">${time}${located
+      ? `<button class="tip-event-location" type="button" data-open-tip data-tip-phase="${phase}" data-tip-latitude="${escapeHtml(latitude)}" data-tip-longitude="${escapeHtml(longitude)}" data-tip-timestamp="${escapeHtml(timestamp)}" data-tip-plate="${escapeHtml(licensePlate)}" aria-label="Ver ubicación de ${label.toLowerCase()} de ${escapeHtml(licensePlate)}">${Number(latitude).toFixed(5)}, ${Number(longitude).toFixed(5)}</button>`
+      : '<span class="tip-event-location">Sin ubicación</span>'}</div>`;
+  };
   return `<div class="tip-event-row">
-    <span class="tip-event-times"><span>Inicio <time datetime="${escapeHtml(event.timestamp)}">${escapeHtml(formatTipTime(event.timestamp))}</time></span>
-      <span>${closed ? `Fin <time datetime="${escapeHtml(event.endAt)}">${escapeHtml(formatTipTime(event.endAt, endOnAnotherDay))}</time>` : 'Pendiente de cierre'}</span></span>
+    ${phaseMarkup('start', event.timestamp, event.latitude, event.longitude)}
+    ${closed ? phaseMarkup('end', event.endAt, event.endLatitude, event.endLongitude) : '<span>Pendiente de cierre</span>'}
     <span class="tip-event-duration">${closed ? `Duración: ${escapeHtml(duration)}` : 'Esperando la lectura de bajada'}</span>
-    ${location}
   </div>`;
 }
 
+async function exportHistoryPdf(key) {
+  if (state.historyExporting || state.historyLoading) return;
+  const days = key ? state.days.filter((day) => `${day.imei}|${day.date}` === key) : filteredDays();
+  if (!days.length) return;
+  state.historyExporting = true;
+  elements.historyExportStatus.textContent = `Preparando PDF de ${days.length} ${days.length === 1 ? 'jornada' : 'jornadas'}…`;
+  renderHistory();
+  try {
+    const blob = await window.apiClient.requestBlob('/api/tracker/report', {
+      method: 'POST', body: JSON.stringify({ days: days.map(({ imei, date }) => ({ imei, date })) })
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `budisa-basculaciones-${days[0].date}${days.length > 1 ? '-pack' : ''}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+    elements.historyExportStatus.textContent = `PDF descargado: ${days.length} ${days.length === 1 ? 'jornada' : 'jornadas'}.`;
+  } catch (error) {
+    elements.historyExportStatus.textContent = `No se ha podido exportar. ${error.message}`;
+  } finally {
+    state.historyExporting = false;
+    renderHistory();
+  }
+}
+
 function renderHistory() {
+  elements.exportHistoryPdf.disabled = state.historyExporting || state.historyLoading || !filteredDays().length;
+  elements.exportHistoryPdf.textContent = state.historyExporting ? 'Preparando PDF…' : 'Exportar tabla a PDF';
   const today = localDayKey();
   const includesToday = (!elements.historyFrom.value || elements.historyFrom.value <= today)
     && (!elements.historyTo.value || elements.historyTo.value >= today);
@@ -1116,7 +1205,8 @@ function renderHistory() {
         <div data-label="Fecha"><time datetime="${escapeHtml(day.date)}">${escapeHtml(formatLongDate(day.date))}</time>${day.date === today ? '<span class="history-day-status">Hoy · En curso</span>' : ''}</div>
         <strong class="movement-duration" data-label="Tiempo en movimiento">${escapeHtml(formatDuration(day.movementSeconds))}</strong>
         <div class="tip-events-cell" data-label="Basculaciones">${tipEventsContent}</div>
-        <div data-label="Recorrido">${day.gpsPointCount === 0 ? '<span class="tip-events-empty">Sin posiciones GPS</span>' : `<button class="quiet-button history-map-button" type="button" data-open-route="${escapeHtml(folderKey)}" aria-controls="historyMapPanel" aria-expanded="${state.historyRoute?.key === folderKey}" aria-label="Ver mapa de ${escapeHtml(licensePlate || 'Sin matrícula')}, ${escapeHtml(formatLongDate(day.date))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4-6-2-7 3v17l7-3 6 2 7-3V1l-7 3ZM8 17.2l-4 1.7V6.3l4-1.7v12.6Zm6 1.4-4-1.3V4.4l4 1.3v12.9Zm6-2-4 1.7V5.8l4-1.7v12.5Z"/></svg>Ver mapa</button>`}</div>
+        <div class="route-day-actions" data-label="Mapa / PDF">${day.gpsPointCount === 0 ? '<span class="tip-events-empty">Sin posiciones GPS</span>' : `<button class="quiet-button history-map-button" type="button" data-open-route="${escapeHtml(folderKey)}" aria-controls="historyMapPanel" aria-expanded="${state.historyRoute?.key === folderKey}" aria-label="Ver mapa de ${escapeHtml(licensePlate || 'Sin matrícula')}, ${escapeHtml(formatLongDate(day.date))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4-6-2-7 3v17l7-3 6 2 7-3V1l-7 3ZM8 17.2l-4 1.7V6.3l4-1.7v12.6Zm6 1.4-4-1.3V4.4l4 1.3v12.9Zm6-2-4 1.7V5.8l4-1.7v12.5Z"/></svg>Ver mapa</button>`}
+        <button class="quiet-button" type="button" data-export-day="${escapeHtml(folderKey)}" ${state.historyExporting || state.historyLoading ? 'disabled' : ''} aria-label="Exportar PDF de ${escapeHtml(licensePlate || 'Sin matrícula')}, ${escapeHtml(day.date)}">Exportar PDF</button></div>
       </article>
     `;
   }).join(''));
@@ -1126,11 +1216,13 @@ function setHistoryMarkup(markup) {
   if (state.historyMarkup === markup) return;
   const focused = elements.historyRouteList.contains(document.activeElement) ? document.activeElement : null;
   const routeKey = focused?.dataset.openRoute;
+  const exportKey = focused?.dataset.exportDay;
   const tipTimestamp = focused?.dataset.tipTimestamp;
   const folderKey = focused?.closest('[data-tip-folder-key]')?.dataset.tipFolderKey;
   state.historyMarkup = markup;
   elements.historyRouteList.innerHTML = markup;
   if (routeKey) elements.historyRouteList.querySelector(`[data-open-route="${CSS.escape(routeKey)}"]`)?.focus({ preventScroll: true });
+  else if (exportKey) elements.historyRouteList.querySelector(`[data-export-day="${CSS.escape(exportKey)}"]`)?.focus({ preventScroll: true });
   else if (folderKey) {
     const folder = elements.historyRouteList.querySelector(`[data-tip-folder-key="${CSS.escape(folderKey)}"]`);
     const target = tipTimestamp ? folder?.querySelector(`[data-tip-timestamp="${CSS.escape(tipTimestamp)}"]`) : folder?.querySelector('summary');
@@ -1275,24 +1367,23 @@ async function loadHistoryRoute({ force = false, fit = false } = {}) {
       state.historyRouteLayers = L.featureGroup().addTo(state.historyMap);
     }
     state.historyMap.invalidateSize();
-    const latlngs = points.map((point) => [point.latitude, point.longitude]);
-    if (latlngs.length > 1) {
-      L.polyline(latlngs, { color: '#0b1220', weight: 7, opacity: 0.7, interactive: false }).addTo(state.historyRouteLayers);
-      L.polyline(latlngs, { color: '#2dd4bf', weight: 4, opacity: 0.95, interactive: false }).addTo(state.historyRouteLayers);
-    }
+    drawActivityRoute(points, state.historyRouteLayers);
     const addEndpoint = (point, label, color) => L.circleMarker([point.latitude, point.longitude], {
       radius: 7, color: '#0b1220', weight: 2, fillColor: color, fillOpacity: 1
     }).bindTooltip(`${label} · ${escapeHtml(formatTime(point.timestamp))}`, { direction: 'top' }).addTo(state.historyRouteLayers);
-    addEndpoint(points[0], points.length === 1 ? 'Única posición' : 'Inicio', '#70a8ff');
-    if (points.length > 1) addEndpoint(points[points.length - 1], 'Última posición', '#62d8ba');
-    (day.tipEvents || []).filter(tipEventHasLocation).forEach((event) => {
-      L.marker([event.latitude, event.longitude], { icon: tipLocationIcon() })
-        .bindTooltip(`Basculación · ${escapeHtml(formatTime(event.timestamp))}`)
+    addEndpoint(points[0], points.length === 1 ? 'Única posición' : 'Inicio del recorrido', '#e2e8f0');
+    if (points.length > 1) addEndpoint(points[points.length - 1], 'Última posición del recorrido', '#94a3b8');
+    (day.tipEvents || []).flatMap((event) => [
+      { phase: 'start', timestamp: event.timestamp, latitude: event.latitude, longitude: event.longitude },
+      { phase: 'end', timestamp: event.endAt, latitude: event.endLatitude, longitude: event.endLongitude }
+    ]).filter((event) => event.timestamp && tipEventHasLocation(event)).forEach((event) => {
+      L.marker([event.latitude, event.longitude], { icon: liveTipEventIcon(event.phase) })
+        .bindTooltip(`${event.phase === 'end' ? 'Fin' : 'Inicio'} de basculación · ${escapeHtml(formatTipTime(event.timestamp, true))}`)
         .addTo(state.historyRouteLayers);
     });
     elements.historyMapStatus.textContent = route.truncated
       ? 'Recorrido parcial: se muestran las primeras 100.000 posiciones de la jornada.'
-      : `${points.length === 1 ? 'Una posición recibida; todavía no hay un trayecto.' : `${points.length.toLocaleString('es-ES')} posiciones · Azul: inicio · Verde: última posición.`}${day.date === localDayKey() ? ' Se actualiza con los nuevos datos.' : ''}`;
+      : `${points.length === 1 ? 'Una posición recibida; todavía no hay un trayecto.' : `${points.length.toLocaleString('es-ES')} posiciones.`}${day.date === localDayKey() ? ' Se actualiza con los nuevos datos.' : ''}`;
     if (fit || firstDraw) fitHistoryRoute();
   } catch (error) {
     if (controller.signal.aborted || state.historyRoute !== selection) return;
@@ -1728,15 +1819,6 @@ async function handleDeviceAction(button) {
   }
 }
 
-function tipLocationIcon() {
-  return L.divIcon({
-    className: '',
-    iconSize: [36, 36],
-    iconAnchor: [18, 34],
-    html: '<span class="tip-location-marker"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.3 7 13 7 13s7-7.7 7-13a7 7 0 0 0-7-7Zm0 10.2A3.2 3.2 0 1 1 12 5.8a3.2 3.2 0 0 1 0 6.4Z"/></svg></span>'
-  });
-}
-
 function ensureTipLocationMap() {
   if (state.tipLocationMap || !window.L) return;
   state.tipLocationMap = L.map(elements.tipLocationMap).setView([40.2, -3.7], 6);
@@ -1754,13 +1836,14 @@ function openTipLocation(button) {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   const plate = button.dataset.tipPlate || 'Sin matrícula';
   const timestamp = button.dataset.tipTimestamp;
-  elements.tipLocationDialogTitle.textContent = `${plate} · Basculación`;
+  const phase = button.dataset.tipPhase === 'end' ? 'end' : 'start';
+  elements.tipLocationDialogTitle.textContent = `${plate} · ${phase === 'end' ? 'Fin' : 'Inicio'} de basculación`;
   elements.tipLocationDialogMeta.textContent = `${formatDateTime(timestamp)} · ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
   elements.tipLocationDialog.showModal();
   ensureTipLocationMap();
   state.tipLocationMap?.invalidateSize();
   state.tipLocationMarker?.remove();
-  state.tipLocationMarker = L.marker([latitude, longitude], { icon: tipLocationIcon() }).addTo(state.tipLocationMap);
+  state.tipLocationMarker = L.marker([latitude, longitude], { icon: liveTipEventIcon(phase) }).addTo(state.tipLocationMap);
   state.tipLocationMap.setView([latitude, longitude], 17);
 }
 
@@ -1776,7 +1859,8 @@ async function refreshPublicData({ silent = false } = {}) {
       requestJson('/api/fleet'),
       requestJson(`/api/tracker/days?from=${encodeURIComponent(today)}&to=${encodeURIComponent(today)}&limit=1000`),
       requestJson('/api/tracker/status').catch(() => null),
-      state.view === 'historico' ? loadHistoryData({ force: true, silent: true }) : Promise.resolve()
+      state.view === 'historico' ? loadHistoryData({ force: true, silent: true }) : Promise.resolve(),
+      state.view === 'mapa' ? loadLiveActivity() : Promise.resolve()
     ]);
     state.fleet = fleet || [];
     state.todayDays = days || [];
@@ -1843,6 +1927,8 @@ function setupListeners() {
     loadHistoryData();
   });
   elements.historyRouteList.addEventListener('click', (event) => {
+    const exportButton = event.target.closest('[data-export-day]');
+    if (exportButton) { exportHistoryPdf(exportButton.dataset.exportDay); return; }
     const routeButton = event.target.closest('[data-open-route]');
     if (routeButton) {
       openHistoryRoute(routeButton);
@@ -1859,6 +1945,7 @@ function setupListeners() {
     else state.openTipFolders.delete(folderKey);
   }, true);
   elements.historyFilters.addEventListener('submit', (event) => event.preventDefault());
+  elements.exportHistoryPdf.addEventListener('click', () => exportHistoryPdf());
   elements.closeHistoryMap.addEventListener('click', () => closeHistoryRoute());
   elements.fitHistoryMap.addEventListener('click', fitHistoryRoute);
   elements.retryHistoryMap.addEventListener('click', () => loadHistoryRoute({ force: true }));

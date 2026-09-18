@@ -138,10 +138,16 @@ Errores relevantes:
 ## Interfaz
 
 - **Dashboard:** resumen ejecutivo de toda la flota activa, mapa compacto de últimas posiciones, métricas de actividad y búsqueda exclusiva por matrícula.
-- **Mapa en vivo:** mapa operativo dedicado con selección de uno, varios o todos los vehículos activos. Actualiza cada 5 segundos, conserva la selección y dibuja el movimiento recibido durante la sesión.
+- **Mapa en vivo:** mapa operativo dedicado con selección de uno, varios o todos los vehículos activos. Actualiza cada 5 segundos y recupera del servidor el recorrido y los avisos de basculación de la **última hora**, también al recargar. Cada posición o aviso desaparece al cumplir una hora, sin borrar el histórico. Un inicio anterior a la ventana puede tener su fin dentro de ella.
 - **Histórico:** filtro por matrícula y fechas; muestra matrícula, jornada, tiempo en movimiento y una carpeta desplegable de basculaciones. «Ver mapa» abre el recorrido de esa jornada, con inicio, última posición y basculaciones. La vista se actualiza cada 5 segundos mientras está abierta, incluida la jornada de hoy, marcada «En curso». El tiempo aumenta con los registros de movimiento recibidos del GPS; no es necesario esperar al cierre del día. El recorrido abierto también incorpora los puntos nuevos, conservando el zoom. Cada coordenada de una basculación sigue abriendo un mapa puntual.
 - **Estado:** tabla operativa con matrícula, IMEI, autorización, conexión, fix GPS y última recepción.
 - **Vehículos:** detección automática de nuevos IMEIs, alta individual, importación CSV, cambio de matrícula, aprobación, deshabilitación y reactivación dentro de la sesión privada. Durante cada cambio se muestra un loader hasta que todas las vistas quedan sincronizadas.
+
+En ambos mapas, la línea es **azul en movimiento**, **ámbar en parada** y **gris discontinua si falta el dato de movimiento**. No se añaden marcadores de parada. El color corresponde al estado recibido al principio de cada intervalo; se interrumpe la línea si se pierde el GPS o pasan más de 15 minutos entre posiciones.
+
+Las basculaciones tienen un aviso **verde de inicio** y otro **rojo de fin**, con su hora y posición propias. Si falta GPS en una lectura, solo esa fase aparece como **Sin ubicación**. El ciclo sigue perteneciendo a la jornada de inicio aunque termine al día siguiente.
+
+En el histórico, **Exportar PDF** descarga una jornada y **Exportar tabla a PDF** descarga un único documento con las jornadas visibles según los filtros de matrícula y fechas (hasta 1.000 jornadas). La tabla incluye matrícula, jornada, fecha/hora y coordenadas de inicio y fin, y duración. Conserva las jornadas sin basculaciones y señala los cierres pendientes. Los datos se consultan de nuevo al generar el informe; las horas corresponden a Europe/Madrid.
 
 El mapa usa Leaflet sobre cartografía OpenStreetMap con un tratamiento visual propio de Budisa.
 
@@ -152,8 +158,10 @@ El mapa usa Leaflet sobre cartografía OpenStreetMap con un tratamiento visual p
 - `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`: acceso y sesión privada.
 - `GET /api/fleet`: estado actual agregado de todos los dispositivos.
 - `GET /api/tracker`: posiciones GPS filtradas por `imei`, `from` y `to`.
-- `GET /api/tracker/days`: tiempo en movimiento y basculaciones agrupados por matrícula y día. `pointCount` cuenta registros, `gpsPointCount` cuenta posiciones válidas; cada `tipEvents` incluye `timestamp`, `endAt`, `durationSeconds`, `status` (`active`/`completed`) y coordenadas de inicio o `null`.
-- `GET /api/tracker/route?imei=...&date=AAAA-MM-DD`: posiciones ordenadas del recorrido de un vehículo en una jornada de Madrid, incluidos los cambios de horario. Devuelve `points` y `truncated` (límite de 100.000 posiciones, indicado en la interfaz cuando se supera).
+- `GET /api/tracker/days`: tiempo en movimiento y basculaciones agrupados por matrícula y día. `pointCount` cuenta registros, `gpsPointCount` cuenta posiciones válidas; cada `tipEvents` incluye `timestamp`, `endAt`, `durationSeconds`, `status` (`active`/`completed`), coordenadas de inicio (`latitude`, `longitude`) y fin (`endLatitude`, `endLongitude`), o `null` si no había GPS válido en esa lectura.
+- `GET /api/tracker/live`: última hora de vehículos habilitados, con `from`, `to`, `truncated` y `vehicles`. Cada vehículo tiene `points` con `movement` y `breakBefore`, y `markers` con `phase` (`start`/`end`), hora y coordenadas. El máximo es de 100.000 lecturas recientes; se indica en la interfaz si la vista es parcial.
+- `POST /api/tracker/report`: recibe `{ "days": [{ "imei": "...", "date": "AAAA-MM-DD" }] }` y devuelve un PDF adjunto de esas jornadas. Requiere sesión y CSRF. Valida la selección, elimina duplicados y reconstruye los ciclos desde las lecturas almacenadas; no acepta eventos aportados por el navegador.
+- `GET /api/tracker/route?imei=...&date=AAAA-MM-DD`: posiciones ordenadas del recorrido de un vehículo en una jornada de Madrid, incluidos los cambios de horario. Devuelve `points` con `movement` y `breakBefore`, y `truncated` (límite de 100.000 lecturas, indicado en la interfaz cuando se supera).
 - `GET /api/tracker/status`: estado no sensible de la integración.
 - `GET/POST /api/trackers`: listado y alta protegidos del registro.
 - `POST /api/trackers/import`: alta o actualización masiva de hasta 250 vehículos.

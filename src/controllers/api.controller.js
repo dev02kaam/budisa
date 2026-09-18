@@ -1,4 +1,5 @@
 const fleetService = require('../services/fleet.service');
+const { getReportDays, createReportPdf } = require('../services/report.service');
 const {
   getGatewayStatus,
   listTrackers,
@@ -59,6 +60,23 @@ async function trackerStatus(req, res, next) {
   } catch (error) {
     next(error);
   }
+}
+
+async function liveActivity(req, res, next) {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, data: await fleetService.getLiveActivity() });
+  } catch (error) { next(error); }
+}
+
+async function exportReport(req, res, next) {
+  try {
+    const days = await getReportDays(req.body?.days);
+    const pdf = await createReportPdf(days);
+    res.set('Cache-Control', 'no-store');
+    res.attachment(`budisa-basculaciones-${days[0].date}${days.length > 1 ? '-pack' : ''}.pdf`);
+    res.type('application/pdf').send(pdf);
+  } catch (error) { next(error); }
 }
 
 async function trackerDayRoute(req, res, next) {
@@ -138,6 +156,8 @@ async function updateTrackerDevice(req, res, next) {
 }
 
 module.exports = {
+  liveActivity,
+  exportReport,
   fleet,
   importTrackerDevices,
   registerTrackerDevice,

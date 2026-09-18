@@ -10,7 +10,7 @@
     unauthorizedHandler = typeof handler === 'function' ? handler : null;
   }
 
-  async function requestJson(url, options = {}) {
+  async function requestData(url, options = {}, binary = false) {
     const { notifyUnauthorized = true, headers: optionHeaders = {}, ...fetchOptions } = options;
     const method = String(fetchOptions.method || 'GET').toUpperCase();
     const headers = { ...optionHeaders };
@@ -25,6 +25,7 @@
       ...fetchOptions,
       headers
     });
+    if (binary && response.ok && response.headers.get('Content-Type')?.includes('application/pdf')) return response.blob();
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok || payload.ok === false) {
@@ -37,9 +38,13 @@
       throw error;
     }
 
+    if (binary) throw new Error('El servidor no ha devuelto un PDF válido. Vuelve a intentarlo.');
     return payload.data;
   }
 
-  window.apiClient = { requestJson, setCsrfToken, setUnauthorizedHandler };
+  const requestJson = (url, options) => requestData(url, options);
+  const requestBlob = (url, options) => requestData(url, options, true);
+
+  window.apiClient = { requestJson, requestBlob, setCsrfToken, setUnauthorizedHandler };
   window.requestJson = requestJson;
 })();

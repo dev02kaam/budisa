@@ -455,6 +455,7 @@ async function run() {
     assert.equal(updatedMovement.data[0].tipEvents.length, 1);
 
     await require('./eye-sensor.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
+    await require('./activity-report.cases')({ baseUrl, adminHeaders });
 
     const logoutResponse = await fetch(`${baseUrl}/auth/logout`, {
       method: 'POST',

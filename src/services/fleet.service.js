@@ -138,19 +138,110 @@ async function findTipperReading(imei, range, direction = -1, raised) {
     deviceId: imei,
     ...TIPPER_SIGNAL_QUERY,
     ...(range ? { positionAt: range } : {})
-  }).select({ positionAt: 1, receivedAt: 1, metadata: 1 })
+  }).select({ positionAt: 1, receivedAt: 1, metadata: 1, gps: 1 })
     .sort({ positionAt: direction, receivedAt: direction, _id: direction }).lean().cursor();
   try {
     for await (const point of cursor) {
       const state = tipperState(point);
       if (state?.raised != null && (raised === undefined || state.raised === raised)) {
-        return { ...state, timestamp: pointDate(point) };
+        const item = pointItem(point);
+        return { ...state, timestamp: item.timestamp, latitude: item.latitude, longitude: item.longitude };
       }
     }
     return null;
   } finally {
     await cursor.close();
   }
+}
+
+function pointItem(point) {
+  const gpsValid = point.metadata?.gpsValid !== false && validCoordinates(point);
+  return {
+    timestamp: pointDate(point),
+    latitude: gpsValid ? Number(point.gps.latitude) : null,
+    longitude: gpsValid ? Number(point.gps.longitude) : null,
+    gpsValid,
+    movement: booleanState(point.metadata?.movement ?? point.metadata?.knownIo?.movement ?? point.metadata?.rawIo?.['240']),
+    tipper: tipperState(point)
+  };
+}
+
+function openTip(item) {
+  return {
+    timestamp: item.timestamp, endAt: null, durationSeconds: null, status: 'active',
+    latitude: item.latitude, longitude: item.longitude, endLatitude: null, endLongitude: null
+  };
+}
+
+function closeTip(event, item) {
+  event.endAt = item.timestamp;
+  event.durationSeconds = Math.max(0, Math.round((item.timestamp - event.timestamp) / 1000));
+  event.status = 'completed';
+  event.endLatitude = item.latitude;
+  event.endLongitude = item.longitude;
+}
+
+async function pairTipEvents(imei, items, { includeCarried = false, lookAhead = true } = {}) {
+  if (!items.length) return [];
+  const previous = await findTipperReading(imei, { $lt: items[0].timestamp });
+  let raised = previous?.raised ?? null;
+  let activeEvent = includeCarried && raised === true ? openTip(previous) : null;
+  const events = activeEvent ? [activeEvent] : [];
+  for (const item of items) {
+    if (item.tipper?.raised == null) continue;
+    if (item.tipper.raised && raised !== true) {
+      activeEvent = openTip(item);
+      events.push(activeEvent);
+    } else if (!item.tipper.raised && activeEvent) {
+      closeTip(activeEvent, item);
+      activeEvent = null;
+    }
+    raised = item.tipper.raised;
+  }
+  if (activeEvent && lookAhead) {
+    const closing = await findTipperReading(imei, { $gt: items[items.length - 1].timestamp }, 1, false);
+    if (closing) closeTip(activeEvent, closing);
+  }
+  return events;
+}
+
+function routePoints(points) {
+  let previous = null;
+  return points.flatMap((point) => {
+    const item = pointItem(point);
+    if (!item.gpsValid) { previous = null; return []; }
+    const result = {
+      timestamp: item.timestamp, latitude: item.latitude, longitude: item.longitude, movement: item.movement,
+      breakBefore: !previous || item.timestamp - previous.timestamp > MAX_MOVEMENT_INTERVAL_MS
+    };
+    previous = item;
+    return [result];
+  });
+}
+
+async function getLiveActivity(now = new Date()) {
+  const to = new Date(now);
+  const from = new Date(to.getTime() - 60 * 60 * 1000);
+  const trackers = await Tracker.find({ enabled: true }).select({ imei: 1 }).lean();
+  const maximumPoints = 100000;
+  const points = await TrackerPoint.find({ deviceId: { $in: trackers.map((item) => item.imei) }, positionAt: { $gte: from, $lte: to } })
+    .select({ deviceId: 1, positionAt: 1, receivedAt: 1, gps: 1, metadata: 1 })
+    .sort({ positionAt: -1, receivedAt: -1, _id: -1 }).limit(maximumPoints + 1).lean();
+  const grouped = new Map();
+  points.slice(0, maximumPoints).reverse().forEach((point) => {
+    const rows = grouped.get(point.deviceId) || [];
+    rows.push(point);
+    grouped.set(point.deviceId, rows);
+  });
+  const vehicles = await Promise.all([...grouped].map(async ([imei, rows]) => {
+    const events = await pairTipEvents(imei, rows.map(pointItem), { includeCarried: true, lookAhead: false });
+    const markers = events.flatMap((event) => [
+      { phase: 'start', timestamp: event.timestamp, latitude: event.latitude, longitude: event.longitude },
+      { phase: 'end', timestamp: event.endAt, latitude: event.endLatitude, longitude: event.endLongitude }
+    ]).filter((event) => event.timestamp && event.timestamp >= from && event.timestamp <= to);
+    return { imei, points: routePoints(rows), markers };
+  }));
+  return { from, to, truncated: points.length > maximumPoints, vehicles };
 }
 
 async function getLatestPoints(imeis) {
@@ -233,16 +324,17 @@ async function getTrackerPoints(filters = {}, limit = 10000) {
   return latest.reverse();
 }
 
-async function getTrackerDays(filters = {}, limit = 500) {
+async function getTrackerDays(filters = {}, limit = 500, { selection } = {}) {
   // Sensor readings remain useful even when the tracker has no GPS fix.
   const query = {};
   if (filters.imei) query.deviceId = filters.imei;
   if (filters.from || filters.to) query.positionAt = buildMadridDayRange(filters);
+  if (selection) query.$or = selection.map(({ imei, date }) => ({ deviceId: imei, positionAt: buildMadridDayRange({ from: date, to: date }) }));
 
   const points = await TrackerPoint.find(query)
     .select({ deviceId: 1, positionAt: 1, receivedAt: 1, gps: 1, metadata: 1 })
     .sort({ positionAt: -1, receivedAt: -1, _id: -1 })
-    .limit(100000)
+    .limit(selection ? 0 : 100000)
     .lean();
   const groups = new Map();
   const byVehicle = new Map();
@@ -259,14 +351,7 @@ async function getTrackerDays(filters = {}, limit = 500) {
     if (filters.to && date > filters.to) return;
 
     const key = `${imei}|${date}`;
-    const item = {
-      timestamp,
-      latitude: gpsValid ? Number(point.gps.latitude) : null,
-      longitude: gpsValid ? Number(point.gps.longitude) : null,
-      gpsValid,
-      movement: booleanState(point.metadata?.movement),
-      tipper: tipperState(point)
-    };
+    const item = pointItem(point);
     const group = groups.get(key) || {
       date,
       imei,
@@ -287,43 +372,25 @@ async function getTrackerDays(filters = {}, limit = 500) {
     group.ordered.push(item);
     groups.set(key, group);
     const vehicle = byVehicle.get(imei) || [];
-    vehicle.push({ ...item, group });
+    vehicle.push(item);
     byVehicle.set(imei, vehicle);
   });
 
-  function closeTip(event, timestamp) {
-    event.endAt = timestamp;
-    event.durationSeconds = Math.max(0, Math.round((timestamp - event.timestamp) / 1000));
-    event.status = 'completed';
-  }
-
   // Pair readings by their device timestamps, across packets and civil-day boundaries.
   await Promise.all([...byVehicle].map(async ([imei, items]) => {
-    const previous = await findTipperReading(imei, { $lt: items[0].timestamp });
-    let raised = previous?.raised ?? null;
-    let activeEvent = null;
+    // Non-contiguous PDF selections must not pair across omitted days.
+    const batches = [];
     for (const item of items) {
-      if (item.tipper?.raised == null) continue;
-      if (item.tipper.raised && raised !== true) {
-        activeEvent = {
-          timestamp: item.timestamp,
-          endAt: null,
-          durationSeconds: null,
-          status: 'active',
-          latitude: item.latitude,
-          longitude: item.longitude
-        };
-        item.group.tipEvents.push(activeEvent);
-      } else if (!item.tipper.raised && activeEvent) {
-        closeTip(activeEvent, item.timestamp);
-        activeEvent = null;
+      let batch = batches[batches.length - 1];
+      const last = batch?.[batch.length - 1];
+      if (!batch || (selection && dayKeyFor(item.timestamp) !== dayKeyFor(last.timestamp))) {
+        batch = []; batches.push(batch);
       }
-      raised = item.tipper.raised;
+      batch.push(item);
     }
-    // Filtering to the start day must not hide a closing reading on the following day.
-    if (activeEvent) {
-      const closing = await findTipperReading(imei, { $gt: items[items.length - 1].timestamp }, 1, false);
-      if (closing) closeTip(activeEvent, closing.timestamp);
+    for (const batch of batches) {
+      const events = await pairTipEvents(imei, batch);
+      events.forEach((event) => groups.get(`${imei}|${dayKeyFor(event.timestamp)}`)?.tipEvents.push(event));
     }
   }));
 
@@ -371,11 +438,8 @@ async function getTrackerDayRoute({ imei, date } = {}) {
   const points = await TrackerPoint.find({
     deviceId: imei,
     positionAt: buildMadridDayRange({ from: date, to: date }),
-    'gps.latitude': { $ne: null },
-    'gps.longitude': { $ne: null },
-    'metadata.gpsValid': { $ne: false }
   })
-    .select({ _id: 0, positionAt: 1, gps: 1 })
+    .select({ _id: 0, positionAt: 1, gps: 1, metadata: 1 })
     .sort({ positionAt: 1, receivedAt: 1 })
     .limit(maximumPoints + 1)
     .lean();
@@ -384,19 +448,17 @@ async function getTrackerDayRoute({ imei, date } = {}) {
     imei,
     date,
     truncated: points.length > maximumPoints,
-    points: points.slice(0, maximumPoints).filter(validCoordinates).map((point) => ({
-      timestamp: point.positionAt,
-      latitude: point.gps.latitude,
-      longitude: point.gps.longitude
-    }))
+    points: routePoints(points.slice(0, maximumPoints))
   };
 }
 
 module.exports = {
   connectionStatus,
   getFleet,
+  getLiveActivity,
   getTrackerDays,
   getTrackerDayRoute,
   getTrackerPoints,
-  haversineDistanceMeters
+  haversineDistanceMeters,
+  validDateKey
 };

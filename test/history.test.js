@@ -18,17 +18,18 @@ function createClient() {
   let tick;
   const context = vm.createContext({
     console, URLSearchParams, AbortController, Intl, Date,
+    URL: { createObjectURL: () => 'blob:test', revokeObjectURL() {} },
     localStorage: { getItem: () => null },
-    document: { body: element('body'), activeElement: null, getElementById: element, querySelectorAll: () => [] },
+    document: { body: { ...element('body'), appendChild() {} }, activeElement: null, getElementById: element, querySelectorAll: () => [], createElement: () => ({ click() {}, remove() {} }) },
     window: {
       setInterval(callback, delay) { assert.equal(delay, 5000); tick = callback; return 1; },
-      clearInterval() {}
+      clearInterval() {}, setTimeout(callback) { callback(); }
     }
   });
   const source = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
   vm.runInContext(source.replace('boot();', `
     renderPublicViews = () => renderHistory();
-    globalThis.client = { state, elements, localDayKey, loadHistoryData, setDefaultHistoryRange, startRefreshTimer, tipEventHasLocation, deviceIsTipping };
+    globalThis.client = { state, elements, localDayKey, loadHistoryData, setDefaultHistoryRange, startRefreshTimer, tipEventHasLocation, deviceIsTipping, routeSegments, liveWindowVehicles, exportHistoryPdf };
   `), context);
   return { context, ...context.client, tick: () => tick() };
 }
@@ -124,6 +125,43 @@ async function run() {
   assert.match(elements.historyRouteList.innerHTML, /data-open-route/);
   assert.equal(app.tipEventHasLocation({ latitude: null, longitude: null }), false);
   assert.equal(app.deviceIsTipping({ tipper: { raised: true }, latestPosition: null }), true);
+  responseDays[0].tipEvents[0].endLatitude = 40.401;
+  responseDays[0].tipEvents[0].endLongitude = -3.701;
+  await app.loadHistoryData({ force: true });
+  assert.match(elements.historyRouteList.innerHTML, /data-tip-phase="start"/);
+  assert.match(elements.historyRouteList.innerHTML, /data-tip-phase="end"/);
+  assert.equal((elements.historyRouteList.innerHTML.match(/data-open-tip/g) || []).length, 2);
+
+  const point = (movement, extra = {}) => ({ latitude: 40.4, longitude: -3.7, movement, ...extra });
+  const segments = app.routeSegments([point(true), point(false), point(false), point(null), point(true), point(true, { breakBefore: true }), point(true)]);
+  assert.equal(segments.map((segment) => segment.kind).join(','), 'moving,stopped,unknown,moving');
+  assert.equal(segments[1].coordinates.length, 3);
+  const now = Date.parse('2026-09-20T10:00:00Z');
+  state.liveSelectedImeis.add(row.imei);
+  state.liveActivity = { vehicles: [{ imei: row.imei, points: [
+    point(true, { timestamp: '2026-09-20T08:59:59Z' }), point(false, { timestamp: '2026-09-20T09:00:00Z' })
+  ], markers: [{ phase: 'start', timestamp: '2026-09-20T08:59:59Z' }, { phase: 'end', timestamp: '2026-09-20T09:00:00Z' }] }] };
+  assert.equal(app.liveWindowVehicles(now)[0].points.length, 1);
+  assert.equal(app.liveWindowVehicles(now)[0].markers.length, 1);
+  assert.equal(app.liveWindowVehicles(now + 1000)[0].markers.length, 0);
+
+  // Export captures exactly the visible filtered days; a row button selects just that row.
+  state.days = [responseDays[0], { ...row, imei: '356000000000002', licensePlate: '9999 XYZ', date: '2026-04-01' }];
+  elements.historySearch.value = '1235';
+  let selection;
+  app.context.window.apiClient = { requestBlob: async (url, options) => { selection = JSON.parse(options.body).days; return {}; } };
+  await app.exportHistoryPdf();
+  assert.deepEqual(selection, [{ imei: row.imei, date: '2026-04-01' }]);
+  assert.match(elements.historyExportStatus.textContent, /PDF descargado: 1 jornada/);
+  elements.historySearch.value = '';
+  await app.exportHistoryPdf();
+  assert.equal(selection.length, 2);
+  await app.exportHistoryPdf(`${row.imei}|2026-04-01`);
+  assert.equal(selection.length, 1);
+  app.context.window.apiClient.requestBlob = async () => { throw new Error('Prueba sin conexión'); };
+  await app.exportHistoryPdf();
+  assert.match(elements.historyExportStatus.textContent, /No se ha podido exportar/);
+  assert.equal(state.historyExporting, false);
   console.log('ok - historico actualiza durante el dia, conserva datos tras errores y respeta filtros concurrentes');
 }
 
