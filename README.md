@@ -113,7 +113,20 @@ El hash y la firma se calculan sobre los bytes JSON enviados, no sobre una seria
 }
 ```
 
-Para alimentar el histórico operativo, cada registro puede incluir `io.known.movement`. Una basculación se registra en la transición de `io.known.tipperRaised` de falso a verdadero. La integración futura con EYE también reconoce `tiltAngleDeg` y considera el volquete elevado desde 25 grados. Si el FTC880 no envía ninguna de esas señales, la jornada indica correctamente que no hay basculaciones registradas.
+Para alimentar el histórico operativo, cada registro puede incluir `io.known.movement`. Las basculaciones se reconstruyen emparejando la lectura de subida con la de bajada, por IMEI y hora del dispositivo. Se reconoce `io.known.tipperRaised`, los ángulos normalizados como `tiltAngleDeg` y el ángulo **Roll del EYE Sensor 1** recibido en `io.raw[10832]` (entero de 16 bits con signo). Referencia: [tabla AVL del FTC887](https://wiki.teltonika-gps.com/view/FTC887_Teltonika_Data_Sending_Parameters_ID).
+
+Los umbrales provisionales para la configuración del sensor en pruebas son **35° para abrir** y **30° para cerrar**, usando el valor absoluto del ángulo. Entre ambos se mantiene el estado anterior. Se pueden ajustar en el entorno y reiniciar el servidor:
+
+```env
+TIPPER_RAISE_ANGLE_DEG=35
+TIPPER_LOWER_ANGLE_DEG=30
+```
+
+Debe cumplirse `0 <= TIPPER_LOWER_ANGLE_DEG < TIPPER_RAISE_ANGLE_DEG <= 180`. Los avisos booleanos explícitos del gateway tienen prioridad sobre el ángulo. Esta integración usa el Roll del sensor 1; no mezcla sensores ni ejes distintos. Los umbrales deben concordar con la configuración del EYE y su montaje.
+
+Cada ciclo aparece una sola vez, con inicio, fin y duración. Hasta recibir la bajada queda pendiente de cierre; las lecturas repetidas, ausentes o inválidas no lo cierran ni generan nuevas basculaciones. El ciclo pertenece al día de inicio, aunque termine al día siguiente. Se interpretan también las lecturas ya almacenadas, sin migrar ni reescribirlas.
+
+Las lecturas **sin fix GPS** también generan jornadas y basculaciones. Si el inicio no tiene coordenadas válidas se muestra **Sin ubicación**, sin inventar una posición a partir de la lectura de cierre. La ruta solo utiliza puntos GPS válidos. `GET /api/fleet` incluye `tipper` (estado, ángulo cuando está disponible y hora de la última lectura que confirma el estado), independiente de `latestPosition`.
 
 Errores relevantes:
 
@@ -139,7 +152,7 @@ El mapa usa Leaflet sobre cartografía OpenStreetMap con un tratamiento visual p
 - `POST /auth/login`, `GET /auth/session`, `POST /auth/logout`: acceso y sesión privada.
 - `GET /api/fleet`: estado actual agregado de todos los dispositivos.
 - `GET /api/tracker`: posiciones GPS filtradas por `imei`, `from` y `to`.
-- `GET /api/tracker/days`: tiempo en movimiento y basculaciones agrupados por matrícula y día.
+- `GET /api/tracker/days`: tiempo en movimiento y basculaciones agrupados por matrícula y día. `pointCount` cuenta registros, `gpsPointCount` cuenta posiciones válidas; cada `tipEvents` incluye `timestamp`, `endAt`, `durationSeconds`, `status` (`active`/`completed`) y coordenadas de inicio o `null`.
 - `GET /api/tracker/route?imei=...&date=AAAA-MM-DD`: posiciones ordenadas del recorrido de un vehículo en una jornada de Madrid, incluidos los cambios de horario. Devuelve `points` y `truncated` (límite de 100.000 posiciones, indicado en la interfaz cuando se supera).
 - `GET /api/tracker/status`: estado no sensible de la integración.
 - `GET/POST /api/trackers`: listado y alta protegidos del registro.

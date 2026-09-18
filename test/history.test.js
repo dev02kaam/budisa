@@ -28,7 +28,7 @@ function createClient() {
   const source = fs.readFileSync(path.join(__dirname, '../public/js/app.js'), 'utf8');
   vm.runInContext(source.replace('boot();', `
     renderPublicViews = () => renderHistory();
-    globalThis.client = { state, elements, localDayKey, loadHistoryData, setDefaultHistoryRange, startRefreshTimer };
+    globalThis.client = { state, elements, localDayKey, loadHistoryData, setDefaultHistoryRange, startRefreshTimer, tipEventHasLocation, deviceIsTipping };
   `), context);
   return { context, ...context.client, tick: () => tick() };
 }
@@ -103,6 +103,27 @@ async function run() {
   elements.historyFrom.value = '2026-04-01';
   await app.loadHistoryData({ force: true });
   assert.equal(elements.historyTo.value, '2026-04-02');
+  // Sensor cycles remain visible without GPS and only located starts open a map.
+  responseDays = [{ ...row, date: '2026-04-01', gpsPointCount: 0, tipEvents: [
+    { timestamp: '2026-04-01T08:43:53Z', endAt: '2026-04-01T08:44:54Z', durationSeconds: 61, status: 'completed', latitude: null, longitude: null },
+    { timestamp: '2026-04-01T09:00:00Z', endAt: null, durationSeconds: null, status: 'active', latitude: null, longitude: null }
+  ] }];
+  await app.loadHistoryData({ force: true });
+  assert.match(elements.historyRouteList.innerHTML, /Inicio/);
+  assert.match(elements.historyRouteList.innerHTML, /Fin/);
+  assert.match(elements.historyRouteList.innerHTML, /Duración: 1 min 1 s/);
+  assert.match(elements.historyRouteList.innerHTML, /Pendiente de cierre/);
+  assert.match(elements.historyRouteList.innerHTML, /Sin ubicación/);
+  assert.match(elements.historyRouteList.innerHTML, /Sin posiciones GPS/);
+  assert.doesNotMatch(elements.historyRouteList.innerHTML, /data-open-tip|data-open-route|0\.00000/);
+  responseDays[0].gpsPointCount = 1;
+  responseDays[0].tipEvents[0].latitude = 40.4;
+  responseDays[0].tipEvents[0].longitude = -3.7;
+  await app.loadHistoryData({ force: true });
+  assert.equal((elements.historyRouteList.innerHTML.match(/data-open-tip/g) || []).length, 1);
+  assert.match(elements.historyRouteList.innerHTML, /data-open-route/);
+  assert.equal(app.tipEventHasLocation({ latitude: null, longitude: null }), false);
+  assert.equal(app.deviceIsTipping({ tipper: { raised: true }, latestPosition: null }), true);
   console.log('ok - historico actualiza durante el dia, conserva datos tras errores y respeta filtros concurrentes');
 }
 

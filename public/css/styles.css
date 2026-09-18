@@ -1744,42 +1744,56 @@ input::placeholder {
   gap: 6px;
 }
 
-.tip-events-list button {
+.tip-event-row {
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) 17px;
-  align-items: center;
-  gap: 9px;
+  gap: 6px;
   width: 100%;
-  padding: 8px 9px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.tip-event-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.tip-event-times time {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.tip-event-location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.tip-events-list button {
+  min-height: 44px;
+  padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--field);
-  color: var(--muted);
+  color: var(--text);
   cursor: pointer;
-  font-size: 0.7rem;
+  font: inherit;
   text-align: left;
 }
 
 .tip-events-list button:hover {
-  border-color: rgba(45, 212, 191, 0.35);
-  color: var(--text);
+  border-color: var(--teal);
 }
 
-.tip-events-list button time {
-  color: var(--text);
-  font-weight: 800;
-}
-
-.tip-events-list button span {
-  overflow: hidden;
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tip-events-list button svg {
+.tip-event-location svg {
   width: 17px;
   height: 17px;
+  flex: 0 0 auto;
   fill: var(--teal);
 }
 

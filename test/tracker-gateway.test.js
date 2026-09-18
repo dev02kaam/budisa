@@ -8,6 +8,8 @@ process.env.TRACKER_KEY_ID = 'gateway-v1';
 process.env.APP_LOGIN_USER = 'admin';
 process.env.APP_LOGIN_PASSWORD = 'test-login-password';
 process.env.APP_COOKIE_SECURE = 'false';
+process.env.TIPPER_RAISE_ANGLE_DEG = '35';
+process.env.TIPPER_LOWER_ANGLE_DEG = '30';
 
 const app = require('../src/app');
 const { connectDb, disconnectDb } = require('../src/config/db');
@@ -451,6 +453,8 @@ async function run() {
     assert.equal(updatedMovement.data[0].movementSeconds, 120);
     assert.equal(updatedMovement.data[0].pointCount, 3);
     assert.equal(updatedMovement.data[0].tipEvents.length, 1);
+
+    await require('./eye-sensor.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
 
     const logoutResponse = await fetch(`${baseUrl}/auth/logout`, {
       method: 'POST',

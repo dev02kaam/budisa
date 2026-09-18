@@ -240,7 +240,7 @@ function deviceIsMoving(device) {
 }
 
 function deviceIsTipping(device) {
-  return device?.latestPosition?.tipperRaised === true;
+  return (device?.tipper?.raised ?? device?.latestPosition?.tipperRaised) === true;
 }
 
 function liveActivityPresentation(device) {
@@ -1034,6 +1034,41 @@ function filteredDays() {
   });
 }
 
+function tipEventHasLocation(event) {
+  if (event.latitude == null || event.longitude == null || event.latitude === '' || event.longitude === '') return false;
+  const latitude = Number(event.latitude);
+  const longitude = Number(event.longitude);
+  return Number.isFinite(latitude) && Number.isFinite(longitude)
+    && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180
+    && !(latitude === 0 && longitude === 0);
+}
+
+function formatTipTime(value, includeDate = false) {
+  return new Date(value).toLocaleString('es-ES', {
+    timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', second: '2-digit',
+    ...(includeDate ? { day: '2-digit', month: '2-digit' } : {})
+  });
+}
+
+function renderTipEvent(event, licensePlate) {
+  const closed = Boolean(event.endAt);
+  const seconds = Math.max(0, Math.round(Number(event.durationSeconds) || 0));
+  const duration = seconds < 60 ? `${seconds} s` : `${formatDuration(seconds)} ${seconds % 60} s`;
+  const endOnAnotherDay = closed && localDayKey(new Date(event.timestamp)) !== localDayKey(new Date(event.endAt));
+  const location = tipEventHasLocation(event)
+    ? `<button class="tip-event-location" type="button" data-open-tip data-tip-latitude="${escapeHtml(event.latitude)}" data-tip-longitude="${escapeHtml(event.longitude)}" data-tip-timestamp="${escapeHtml(event.timestamp)}" data-tip-plate="${escapeHtml(licensePlate)}" aria-label="Ver ubicación del inicio de basculación de ${escapeHtml(licensePlate)}, ${escapeHtml(formatTipTime(event.timestamp))}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.3 7 13 7 13s7-7.7 7-13a7 7 0 0 0-7-7Zm0 10.2A3.2 3.2 0 1 1 12 5.8a3.2 3.2 0 0 1 0 6.4Z"/></svg>
+        Ver ubicación · ${Number(event.latitude).toFixed(5)}, ${Number(event.longitude).toFixed(5)}
+      </button>`
+    : '<span class="tip-event-location">Sin ubicación</span>';
+  return `<div class="tip-event-row">
+    <span class="tip-event-times"><span>Inicio <time datetime="${escapeHtml(event.timestamp)}">${escapeHtml(formatTipTime(event.timestamp))}</time></span>
+      <span>${closed ? `Fin <time datetime="${escapeHtml(event.endAt)}">${escapeHtml(formatTipTime(event.endAt, endOnAnotherDay))}</time>` : 'Pendiente de cierre'}</span></span>
+    <span class="tip-event-duration">${closed ? `Duración: ${escapeHtml(duration)}` : 'Esperando la lectura de bajada'}</span>
+    ${location}
+  </div>`;
+}
+
 function renderHistory() {
   const today = localDayKey();
   const includesToday = (!elements.historyFrom.value || elements.historyFrom.value <= today)
@@ -1061,7 +1096,7 @@ function renderHistory() {
   `;
 
   if (!days.length) {
-    setHistoryMarkup(`<div class="empty-state"><strong>No hay jornadas para estos filtros</strong><p>Cuando lleguen posiciones GPS, Budisa agrupará automáticamente la actividad por vehículo y día.</p></div>`);
+    setHistoryMarkup(`<div class="empty-state"><strong>No hay jornadas para estos filtros</strong><p>Cuando lleguen datos del localizador o del sensor, Budisa agrupará la actividad por vehículo y día.</p></div>`);
     return;
   }
 
@@ -1072,12 +1107,7 @@ function renderHistory() {
     const tipEventsContent = tipEvents.length
       ? `<details class="tip-events-folder" data-tip-folder-key="${escapeHtml(folderKey)}"${state.openTipFolders.has(folderKey) ? ' open' : ''}>
           <summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5h7l2 2H21v11H3v-13Zm2 4v7h14v-7H5Z"/></svg><span>${tipEvents.length} ${tipEvents.length === 1 ? 'basculación' : 'basculaciones'}</span></summary>
-          <div class="tip-events-list">${tipEvents.map((event, index) => `
-            <button type="button" data-open-tip data-tip-latitude="${escapeHtml(event.latitude)}" data-tip-longitude="${escapeHtml(event.longitude)}" data-tip-timestamp="${escapeHtml(event.timestamp)}" data-tip-plate="${escapeHtml(licensePlate || 'Sin matrícula')}">
-              <time datetime="${escapeHtml(event.timestamp)}">${escapeHtml(formatTime(event.timestamp))}</time>
-              <span>${Number(event.latitude).toFixed(5)}, ${Number(event.longitude).toFixed(5)}</span>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.3 7 13 7 13s7-7.7 7-13a7 7 0 0 0-7-7Zm0 10.2A3.2 3.2 0 1 1 12 5.8a3.2 3.2 0 0 1 0 6.4Z"/></svg>
-            </button>`).join('')}</div>
+          <div class="tip-events-list">${tipEvents.map((event) => renderTipEvent(event, licensePlate || 'Sin matrícula')).join('')}</div>
         </details>`
       : '<span class="tip-events-empty">Sin basculaciones</span>';
     return `
@@ -1086,7 +1116,7 @@ function renderHistory() {
         <div data-label="Fecha"><time datetime="${escapeHtml(day.date)}">${escapeHtml(formatLongDate(day.date))}</time>${day.date === today ? '<span class="history-day-status">Hoy · En curso</span>' : ''}</div>
         <strong class="movement-duration" data-label="Tiempo en movimiento">${escapeHtml(formatDuration(day.movementSeconds))}</strong>
         <div class="tip-events-cell" data-label="Basculaciones">${tipEventsContent}</div>
-        <div data-label="Recorrido"><button class="quiet-button history-map-button" type="button" data-open-route="${escapeHtml(folderKey)}" aria-controls="historyMapPanel" aria-expanded="${state.historyRoute?.key === folderKey}" aria-label="Ver mapa de ${escapeHtml(licensePlate || 'Sin matrícula')}, ${escapeHtml(formatLongDate(day.date))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4-6-2-7 3v17l7-3 6 2 7-3V1l-7 3ZM8 17.2l-4 1.7V6.3l4-1.7v12.6Zm6 1.4-4-1.3V4.4l4 1.3v12.9Zm6-2-4 1.7V5.8l4-1.7v12.5Z"/></svg>Ver mapa</button></div>
+        <div data-label="Recorrido">${day.gpsPointCount === 0 ? '<span class="tip-events-empty">Sin posiciones GPS</span>' : `<button class="quiet-button history-map-button" type="button" data-open-route="${escapeHtml(folderKey)}" aria-controls="historyMapPanel" aria-expanded="${state.historyRoute?.key === folderKey}" aria-label="Ver mapa de ${escapeHtml(licensePlate || 'Sin matrícula')}, ${escapeHtml(formatLongDate(day.date))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4-6-2-7 3v17l7-3 6 2 7-3V1l-7 3ZM8 17.2l-4 1.7V6.3l4-1.7v12.6Zm6 1.4-4-1.3V4.4l4 1.3v12.9Zm6-2-4 1.7V5.8l4-1.7v12.5Z"/></svg>Ver mapa</button>`}</div>
       </article>
     `;
   }).join(''));
@@ -1255,7 +1285,7 @@ async function loadHistoryRoute({ force = false, fit = false } = {}) {
     }).bindTooltip(`${label} · ${escapeHtml(formatTime(point.timestamp))}`, { direction: 'top' }).addTo(state.historyRouteLayers);
     addEndpoint(points[0], points.length === 1 ? 'Única posición' : 'Inicio', '#70a8ff');
     if (points.length > 1) addEndpoint(points[points.length - 1], 'Última posición', '#62d8ba');
-    (day.tipEvents || []).forEach((event) => {
+    (day.tipEvents || []).filter(tipEventHasLocation).forEach((event) => {
       L.marker([event.latitude, event.longitude], { icon: tipLocationIcon() })
         .bindTooltip(`Basculación · ${escapeHtml(formatTime(event.timestamp))}`)
         .addTo(state.historyRouteLayers);
@@ -1718,6 +1748,7 @@ function ensureTipLocationMap() {
 }
 
 function openTipLocation(button) {
+  if (!tipEventHasLocation({ latitude: button.dataset.tipLatitude, longitude: button.dataset.tipLongitude })) return;
   const latitude = Number(button.dataset.tipLatitude);
   const longitude = Number(button.dataset.tipLongitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
