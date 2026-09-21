@@ -185,6 +185,7 @@ async function registerTracker({ imei, licensePlate, manufacturer = '', model = 
         manufacturer,
         model,
         enabled: true,
+        deletedAt: null,
         approvalStatus: 'approved'
       }
     },
@@ -244,6 +245,7 @@ async function registerTrackers(rows) {
           $set: {
             licensePlate: row.licensePlate,
             enabled: true,
+            deletedAt: null,
             approvalStatus: 'approved'
           }
         },
@@ -304,7 +306,7 @@ function trackerStatus(tracker) {
 }
 
 async function listTrackers() {
-  const trackers = await Tracker.find().sort({ lastAttemptAt: -1, createdAt: -1 }).lean();
+  const trackers = await Tracker.find({ deletedAt: null }).sort({ lastAttemptAt: -1, createdAt: -1 }).lean();
   const order = { pending: 0, approved: 1, disabled: 2 };
   return trackers
     .map((tracker) => ({
@@ -329,7 +331,7 @@ async function updateTracker({ imei, enabled, licensePlate }) {
     throw new TrackerGatewayError('El IMEI debe contener 15 digitos', 'INVALID_IMEI', 400);
   }
 
-  const current = await Tracker.findOne({ imei: String(imei) });
+  const current = await Tracker.findOne({ imei: String(imei), deletedAt: null });
   if (!current) {
     throw new TrackerGatewayError('IMEI no encontrado', 'TRACKER_NOT_FOUND', 404);
   }
@@ -358,7 +360,28 @@ async function updateTracker({ imei, enabled, licensePlate }) {
     throw new TrackerGatewayError('No hay cambios para guardar', 'EMPTY_TRACKER_UPDATE', 400);
   }
 
-  return Tracker.findOneAndUpdate({ imei: String(imei) }, { $set: updates }, { new: true });
+  const updated = await Tracker.findOneAndUpdate({ imei: String(imei), deletedAt: null }, { $set: updates }, { new: true });
+  if (!updated) throw new TrackerGatewayError('IMEI no encontrado', 'TRACKER_NOT_FOUND', 404);
+  return updated;
+}
+
+async function deleteTracker(imei) {
+  if (!/^\d{15}$/.test(String(imei || ''))) {
+    throw new TrackerGatewayError('El IMEI debe contener 15 digitos', 'INVALID_IMEI', 400);
+  }
+  // Keep the identity for historical reports and block automatic rediscovery.
+  // The state condition is atomic: a concurrent reactivation must prevent deletion.
+  const deleted = await Tracker.findOneAndUpdate({
+    imei: String(imei), deletedAt: null, enabled: false,
+    $or: [
+      { approvalStatus: 'disabled' },
+      { approvalStatus: null, lastAttemptAt: null }
+    ]
+  }, { $set: { deletedAt: new Date() } }, { new: true });
+  if (deleted) return { imei: deleted.imei };
+  const current = await Tracker.findOne({ imei: String(imei), deletedAt: null }).select({ _id: 1 }).lean();
+  if (!current) throw new TrackerGatewayError('El vehículo ya no está en el registro.', 'TRACKER_NOT_FOUND', 404);
+  throw new TrackerGatewayError('Solo puedes eliminar vehículos deshabilitados. Actualiza la lista y comprueba su estado.', 'TRACKER_MUST_BE_DISABLED', 409);
 }
 
 async function setTrackerApproval(imei, enabled, licensePlate) {
@@ -386,7 +409,7 @@ async function releaseNonce({ keyId, nonce }) {
 
 async function ingestGatewayPacket(payload) {
   const normalized = validateGatewayPayload(payload);
-  const tracker = await Tracker.findOne({ imei: normalized.imei, enabled: true });
+  const tracker = await Tracker.findOne({ imei: normalized.imei, enabled: true, deletedAt: null });
 
   if (!tracker) {
     await recordTrackerAttempt(normalized);
@@ -431,9 +454,9 @@ async function ingestGatewayPacket(payload) {
 
 async function getGatewayStatus() {
   const [registeredDevices, pendingDevices, latestTracker] = await Promise.all([
-    Tracker.countDocuments({ enabled: true }),
-    Tracker.countDocuments({ approvalStatus: 'pending' }),
-    Tracker.findOne({ enabled: true }).sort({ lastSeenAt: -1 }).lean()
+    Tracker.countDocuments({ enabled: true, deletedAt: null }),
+    Tracker.countDocuments({ approvalStatus: 'pending', deletedAt: null }),
+    Tracker.findOne({ enabled: true, deletedAt: null }).sort({ lastSeenAt: -1 }).lean()
   ]);
 
   return {
@@ -456,6 +479,7 @@ async function getGatewayStatus() {
 module.exports = {
   TrackerGatewayError,
   claimNonce,
+  deleteTracker,
   getGatewayStatus,
   ingestGatewayPacket,
   listTrackers,

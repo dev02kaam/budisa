@@ -456,6 +456,7 @@ async function run() {
 
     await require('./eye-sensor.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
     await require('./activity-report.cases')({ baseUrl, adminHeaders });
+    await require('./tracker-deletion.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
 
     const logoutResponse = await fetch(`${baseUrl}/auth/logout`, {
       method: 'POST',

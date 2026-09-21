@@ -222,7 +222,7 @@ function routePoints(points) {
 async function getLiveActivity(now = new Date()) {
   const to = new Date(now);
   const from = new Date(to.getTime() - 60 * 60 * 1000);
-  const trackers = await Tracker.find({ enabled: true }).select({ imei: 1 }).lean();
+  const trackers = await Tracker.find({ enabled: true, deletedAt: null }).select({ imei: 1 }).lean();
   const maximumPoints = 100000;
   const points = await TrackerPoint.find({ deviceId: { $in: trackers.map((item) => item.imei) }, positionAt: { $gte: from, $lte: to } })
     .select({ deviceId: 1, positionAt: 1, receivedAt: 1, gps: 1, metadata: 1 })
@@ -255,7 +255,7 @@ async function getLatestPoints(imeis) {
 }
 
 async function getFleet() {
-  const trackers = await Tracker.find().sort({ licensePlate: 1, imei: 1 }).lean();
+  const trackers = await Tracker.find({ deletedAt: null }).sort({ licensePlate: 1, imei: 1 }).lean();
   const latestByImei = await getLatestPoints(trackers.map((tracker) => tracker.imei));
   const tipperByImei = new Map(await Promise.all(trackers.map(async (tracker) =>
     [tracker.imei, await findTipperReading(tracker.imei)])));

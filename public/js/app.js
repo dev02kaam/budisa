@@ -98,6 +98,7 @@ const state = {
   tipLocationMarker: null,
   adminTrackers: [],
   adminLoading: false,
+  adminRequest: null,
   adminBusyImei: '',
   adminEditingImei: '',
   historyLoaded: false,
@@ -507,6 +508,9 @@ function stopRefreshTimer() {
 
 function showLogin(message = '') {
   stopRefreshTimer();
+  state.adminRequest?.abort();
+  state.adminRequest = null;
+  state.adminLoading = false;
   state.liveActivityRequest?.abort();
   state.liveActivityRequest = null;
   state.liveActivity = null;
@@ -1606,32 +1610,43 @@ function renderAdminDevices() {
           <div class="device-imei" data-label="IMEI"><strong>${escapeHtml(tracker.imei)}</strong></div>
           <div data-label="Estado">${statusBadge(presentation)}</div>
           <div class="device-admin-date" data-label="Actividad">${tracker.lastSeenAt ? `Dato: ${escapeHtml(formatRelative(tracker.lastSeenAt))}` : tracker.lastAttemptAt ? `Intento: ${escapeHtml(formatRelative(tracker.lastAttemptAt))}` : 'Sin actividad'}</div>
-          <div class="device-admin-actions" data-label="Acciones"><button class="row-action ${action === 'disable' ? 'is-danger' : 'is-primary'}" type="button" data-device-action="${action}" data-imei="${escapeHtml(tracker.imei)}" ${busy ? 'disabled' : ''}>${busy && !editing ? 'Guardando…' : actionLabel}</button></div>
+          <div class="device-admin-actions" data-label="Acciones">
+            <button class="row-action ${action === 'disable' ? 'is-danger' : 'is-primary'}" type="button" data-device-action="${action}" data-imei="${escapeHtml(tracker.imei)}" ${busy ? 'disabled' : ''}>${busy && !editing ? 'Procesando…' : actionLabel}</button>
+            ${tracker.status === 'disabled' && tracker.enabled === false ? `<button class="row-action is-danger" type="button" data-device-action="delete" data-imei="${escapeHtml(tracker.imei)}" aria-label="Eliminar vehículo ${escapeHtml(licensePlate || tracker.imei)}" ${busy ? 'disabled' : ''}>Eliminar</button>` : ''}
+          </div>
         </article>
       `;
     }).join('')}
   `;
 }
 
-async function loadAdminTrackers({ silent = false } = {}) {
-  if (state.adminLoading) return;
+async function loadAdminTrackers({ silent = false, force = false } = {}) {
+  if (state.adminLoading && !force) return;
+  state.adminRequest?.abort();
+  const controller = new AbortController();
+  state.adminRequest = controller;
   state.adminLoading = true;
   if (!silent) setAdminFeedback('Consultando el registro…');
   renderAdminDevices();
   try {
-    state.adminTrackers = await requestJson('/api/trackers');
+    const trackers = await requestJson('/api/trackers', { signal: controller.signal });
+    if (state.adminRequest !== controller || controller.signal.aborted) return;
+    state.adminTrackers = trackers;
     if (!silent) setAdminFeedback('Registro actualizado.', 'success');
   } catch (error) {
-    setAdminFeedback(error.message, 'error');
+    if (state.adminRequest === controller && !controller.signal.aborted) setAdminFeedback(error.message, 'error');
   } finally {
-    state.adminLoading = false;
-    renderAdminDevices();
+    if (state.adminRequest === controller) {
+      state.adminRequest = null;
+      state.adminLoading = false;
+      renderAdminDevices();
+    }
   }
 }
 
 async function refreshVehicleViews() {
   await Promise.all([
-    loadAdminTrackers({ silent: true }),
+    loadAdminTrackers({ silent: true, force: true }),
     refreshPublicData({ silent: true }),
     state.historyLoaded ? loadHistoryData({ force: true }) : Promise.resolve()
   ]);
@@ -1755,7 +1770,7 @@ function licensePlateInputFor(imei) {
 async function handleDeviceAction(button) {
   const imei = button.dataset.imei;
   const action = button.dataset.deviceAction;
-  if (!imei || !action) return;
+  if (!imei || !action || state.adminBusyImei || state.syncing) return;
   if (action === 'edit') {
     state.adminEditingImei = imei;
     setAdminFeedback('');
@@ -1775,6 +1790,7 @@ async function handleDeviceAction(button) {
   }
 
   const tracker = state.adminTrackers.find((item) => item.imei === imei);
+  if (!tracker) return;
   const storedLicensePlate = normalizeLicensePlate(tracker?.licensePlate);
   const licensePlate = action === 'save'
     ? normalizeLicensePlate(licensePlateInputFor(imei)?.value)
@@ -1790,6 +1806,14 @@ async function handleDeviceAction(button) {
     return;
   }
   if (action === 'disable' && !window.confirm(`¿Deshabilitar ${licensePlate || imei}? Dejará de aceptar posiciones hasta que lo reactives.`)) return;
+  const deleting = action === 'delete';
+  if (deleting) {
+    if (tracker.status !== 'disabled' || tracker.enabled !== false) {
+      setAdminFeedback('Solo puedes eliminar vehículos deshabilitados.', 'error');
+      return;
+    }
+    if (!window.confirm(`¿Estás seguro de que quieres eliminar el vehículo ${licensePlate || imei}?\n\nSe quitará de Vehículos y de la flota. Su histórico de jornadas y basculaciones se conservará.`)) return;
+  }
 
   const payload = action === 'save'
     ? { licensePlate }
@@ -1798,22 +1822,23 @@ async function handleDeviceAction(button) {
       : { enabled: true, licensePlate };
   state.adminBusyImei = imei;
   renderAdminDevices();
-  setAdminFeedback(`${action === 'disable' ? 'Deshabilitando' : 'Guardando'} ${licensePlate || imei}…`);
-  setSyncing(true, 'Actualizando vehículo', `Aplicando los cambios de ${licensePlate || imei} en toda la aplicación.`);
+  setAdminFeedback(`${deleting ? 'Eliminando' : action === 'disable' ? 'Deshabilitando' : 'Guardando'} ${licensePlate || imei}…`);
+  setSyncing(true, deleting ? 'Eliminando vehículo' : 'Actualizando vehículo', `Aplicando los cambios de ${licensePlate || imei} en toda la aplicación.`);
   let saved = false;
   try {
-    await requestJson(`/api/trackers/${encodeURIComponent(imei)}`, {
+    await requestJson(`/api/trackers/${encodeURIComponent(imei)}`, deleting ? { method: 'DELETE' } : {
       method: 'PATCH',
       body: JSON.stringify(payload)
     });
     saved = true;
-    setAdminFeedback(`${licensePlate || imei} actualizado.`, 'success');
+    if (deleting) state.adminTrackers = state.adminTrackers.filter((item) => item.imei !== imei);
+    setAdminFeedback(deleting ? `${licensePlate || imei} eliminado. Su histórico se conserva.` : `${licensePlate || imei} actualizado.`, 'success');
     await refreshVehicleViews();
   } catch (error) {
     setAdminFeedback(error.message, 'error');
   } finally {
     state.adminBusyImei = '';
-    if (saved && action === 'save') state.adminEditingImei = '';
+    if (saved && (action === 'save' || deleting)) state.adminEditingImei = '';
     setSyncing(false);
     renderAdminDevices();
   }

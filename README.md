@@ -23,6 +23,7 @@ Render aloja la web y la API. Railway publica únicamente el socket TCP binario 
 - IMEI y matrícula se guardan en MongoDB; no se añade una variable de entorno por camión.
 - Un IMEI desconocido se registra automáticamente como pendiente. Desde **Vehículos** se le asigna la matrícula antes de aprobarlo.
 - Un dispositivo pendiente o deshabilitado no puede guardar posiciones y produce `403 UNKNOWN_DEVICE`, por lo que el gateway responde ACK cero al Teltonika.
+- En **Vehículos**, un vehículo deshabilitado ofrece **Eliminar**, con confirmación de su matrícula. Desaparece del registro visible y de la flota, conservando su identidad, jornadas y basculaciones para el histórico y los PDF. Si vuelve a transmitir, sigue bloqueado y no reaparece automáticamente. Para volver a utilizar ese IMEI, se puede dar de alta de nuevo manualmente o mediante CSV.
 
 También puede registrarse de antemano desde consola:
 
@@ -166,6 +167,7 @@ El mapa usa Leaflet sobre cartografía OpenStreetMap con un tratamiento visual p
 - `GET/POST /api/trackers`: listado y alta protegidos del registro.
 - `POST /api/trackers/import`: alta o actualización masiva de hasta 250 vehículos.
 - `PATCH /api/trackers/:imei`: cambio de matrícula, aprobación, reactivación o deshabilitación protegidos.
+- `DELETE /api/trackers/:imei`: eliminación del registro visible, solo si está deshabilitado; conserva el histórico. Requiere sesión y CSRF, devuelve `409 TRACKER_MUST_BE_DISABLED` si está activo o pendiente, y `404 TRACKER_NOT_FOUND` si ya no está disponible.
 
 Todos los endpoints `/api/*` requieren la cookie de sesión de la aplicación. Las operaciones que modifican datos también requieren el token CSRF entregado al iniciar sesión.
 

@@ -1,6 +1,7 @@
 const fleetService = require('../services/fleet.service');
 const { getReportDays, createReportPdf } = require('../services/report.service');
 const {
+  deleteTracker,
   getGatewayStatus,
   listTrackers,
   registerTracker,
@@ -155,7 +156,14 @@ async function updateTrackerDevice(req, res, next) {
   }
 }
 
+async function deleteTrackerDevice(req, res, next) {
+  try {
+    res.json({ ok: true, data: await deleteTracker(req.params.imei) });
+  } catch (error) { next(error); }
+}
+
 module.exports = {
+  deleteTrackerDevice,
   liveActivity,
   exportReport,
   fleet,

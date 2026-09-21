@@ -21,6 +21,10 @@ const TrackerSchema = new mongoose.Schema(
       default: false,
       index: true
     },
+    deletedAt: {
+      type: Date,
+      default: null
+    },
     approvalStatus: {
       type: String,
       enum: ['pending', 'approved', 'disabled'],

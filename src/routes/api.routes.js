@@ -14,5 +14,6 @@ router.get('/trackers', api.trackers);
 router.post('/trackers', api.registerTrackerDevice);
 router.post('/trackers/import', api.importTrackerDevices);
 router.patch('/trackers/:imei', api.updateTrackerDevice);
+router.delete('/trackers/:imei', api.deleteTrackerDevice);
 
 module.exports = router;

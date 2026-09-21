@@ -2356,6 +2356,7 @@ input::placeholder {
 
 .device-admin-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
