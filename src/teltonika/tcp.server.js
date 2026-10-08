@@ -85,7 +85,7 @@ function createSession(socket, onPacket, logger) {
         const frame = buffer.subarray(0, frameLength);
         buffer = buffer.subarray(frameLength);
         const packet = parseCodec8ExtendedFrame(frame);
-        const accepted = await onPacket({ imei, ...packet });
+        const accepted = await onPacket({ imei, ...packet, rawFrame: frame });
         const acceptedCount = Number.isInteger(accepted)
           ? Math.max(0, Math.min(accepted, packet.recordCount))
           : packet.recordCount;

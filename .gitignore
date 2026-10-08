@@ -3,3 +3,8 @@ node_modules/
 npm-debug.log*
 coverage/
 dist/
+
+# Documentos generados y archivos usados para prepararlos
+/output/documentos/
+/output/playwright/autoescuela/
+/output/playwright/autoescuela_neutra/

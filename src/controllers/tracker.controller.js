@@ -5,6 +5,7 @@ const {
   releaseNonce
 } = require('../services/tracker-gateway.service');
 const { TrackerAuthError, verifyTrackerRequest } = require('../utils/tracker-auth');
+const { recordTrackerReception } = require('../services/tracker-debug.service');
 
 const rawJsonOptions = {
   limit: '2mb',
@@ -14,9 +15,27 @@ const rawJsonOptions = {
   }
 };
 
-function sendTrackerError(res, error) {
-  const status = error.statusCode || 400;
+function beginTrackerReception(req, res, next) {
+  req.trackerReceivedAt = new Date();
+  next();
+}
+
+async function sendTrackerResponse(req, res, status, response, error) {
+  await recordTrackerReception({
+    payload: req.body,
+    rawBody: req.rawBody,
+    receivedAt: req.trackerReceivedAt,
+    statusCode: status,
+    response,
+    diagnosticCode: error?.diagnosticCode || ''
+  });
+  return res.status(status).json(response);
+}
+
+function sendTrackerError(res, error, req) {
+  const status = error.statusCode || error.status || 400;
   const code = error.code || 'INVALID_PAYLOAD';
+  if (req) return sendTrackerResponse(req, res, status, { ok: false, code }, error);
   return res.status(status).json({ ok: false, code });
 }
 
@@ -49,7 +68,7 @@ async function ingestTracker(req, res) {
 
     try {
       const accepted = await ingestGatewayPacket(req.body);
-      return res.status(200).json({ ok: true, accepted });
+      return sendTrackerResponse(req, res, 200, { ok: true, accepted });
     } catch (error) {
       await releaseNonce(auth);
       throw error;
@@ -58,8 +77,8 @@ async function ingestTracker(req, res) {
     if (error instanceof TrackerAuthError) {
       logTrackerAuthFailure(req, error);
     }
-    return sendTrackerError(res, error);
+    return sendTrackerError(res, error, req);
   }
 }
 
-module.exports = { ingestTracker, logTrackerAuthFailure, rawJsonOptions, sendTrackerError };
+module.exports = { beginTrackerReception, ingestTracker, logTrackerAuthFailure, rawJsonOptions, sendTrackerError };

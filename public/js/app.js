@@ -26,6 +26,10 @@ const VIEW_META = {
   vehiculos: {
     title: 'Gestión de vehículos',
     subtitle: 'Matrícula asociada de forma segura a cada IMEI.'
+  },
+  debug: {
+    title: 'Debug del tracker',
+    subtitle: 'Cada recepción con su fecha, resultado y paquete completo.'
   }
 };
 
@@ -508,6 +512,7 @@ function stopRefreshTimer() {
 
 function showLogin(message = '') {
   stopRefreshTimer();
+  window.trackerDebug.reset();
   state.adminRequest?.abort();
   state.adminRequest = null;
   state.adminLoading = false;
@@ -541,7 +546,7 @@ function startRefreshTimer() {
   state.refreshTimer = window.setInterval(async () => {
     if (!state.syncing && !state.refreshing && state.authenticated) {
       state.refreshTick += 1;
-      const shouldRefresh = ['mapa', 'historico'].includes(state.view) || state.refreshTick % 3 === 0;
+      const shouldRefresh = ['mapa', 'historico', 'debug'].includes(state.view) || state.refreshTick % 3 === 0;
       if (!shouldRefresh) return;
       state.refreshing = true;
       try {
@@ -673,6 +678,7 @@ function setView(view) {
   if (next === 'vehiculos' && !state.adminTrackers.length) {
     loadAdminTrackers();
   }
+  if (next === 'debug') window.trackerDebug.load();
 }
 
 function renderMetrics() {
@@ -1885,7 +1891,8 @@ async function refreshPublicData({ silent = false } = {}) {
       requestJson(`/api/tracker/days?from=${encodeURIComponent(today)}&to=${encodeURIComponent(today)}&limit=1000`),
       requestJson('/api/tracker/status').catch(() => null),
       state.view === 'historico' ? loadHistoryData({ force: true, silent: true }) : Promise.resolve(),
-      state.view === 'mapa' ? loadLiveActivity() : Promise.resolve()
+      state.view === 'mapa' ? loadLiveActivity() : Promise.resolve(),
+      state.view === 'debug' ? window.trackerDebug.load({ automatic: true }) : Promise.resolve()
     ]);
     state.fleet = fleet || [];
     state.todayDays = days || [];

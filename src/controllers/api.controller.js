@@ -1,5 +1,6 @@
 const fleetService = require('../services/fleet.service');
 const { getReportDays, createReportPdf } = require('../services/report.service');
+const { listTrackerReceptions, getTrackerReception } = require('../services/tracker-debug.service');
 const {
   deleteTracker,
   getGatewayStatus,
@@ -13,6 +14,20 @@ function boundedLimit(value, fallback, maximum) {
   const number = Number(value || fallback);
   if (!Number.isFinite(number)) return fallback;
   return Math.min(Math.max(Math.trunc(number), 1), maximum);
+}
+
+async function trackerDebug(req, res, next) {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, data: await listTrackerReceptions(req.query) });
+  } catch (error) { next(error); }
+}
+
+async function trackerDebugPacket(req, res, next) {
+  try {
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, data: await getTrackerReception(req.params.id) });
+  } catch (error) { next(error); }
 }
 
 async function fleet(req, res, next) {
@@ -170,6 +185,8 @@ module.exports = {
   importTrackerDevices,
   registerTrackerDevice,
   tracker,
+  trackerDebug,
+  trackerDebugPacket,
   trackerDays,
   trackerDayRoute,
   trackerStatus,

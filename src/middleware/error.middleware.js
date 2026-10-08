@@ -6,12 +6,8 @@ function notFound(req, res, next) {
 }
 
 function errorHandler(err, req, res, next) {
-  if (req.originalUrl === '/tracker') {
-    const status = err.statusCode || 400;
-    return res.status(status).json({
-      ok: false,
-      code: err.code || 'INVALID_PAYLOAD'
-    });
+  if (req.path === '/tracker' && req.method === 'POST') {
+    return require('../controllers/tracker.controller').sendTrackerError(res, err, req).catch(next);
   }
 
   const status = err.statusCode || err.status || 500;

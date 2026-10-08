@@ -457,6 +457,7 @@ async function run() {
     await require('./eye-sensor.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
     await require('./activity-report.cases')({ baseUrl, adminHeaders });
     await require('./tracker-deletion.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
+    await require('./tracker-debug.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
 
     const logoutResponse = await fetch(`${baseUrl}/auth/logout`, {
       method: 'POST',
@@ -467,6 +468,7 @@ async function run() {
     const signedOutResponse = await fetch(`${baseUrl}/api/fleet`, { headers: adminHeaders });
     assert.equal(signedOutResponse.status, 401);
     assert.equal((await fetch(`${baseUrl}/api/tracker/route?imei=${routeImei}&date=2026-03-29`, { headers: adminHeaders })).status, 401);
+    assert.equal((await fetch(`${baseUrl}/api/tracker/debug`, { headers: adminHeaders })).status, 401);
 
     console.log('ok - valida HMAC, registro pendiente, aprobacion, bloqueo e historico del gateway');
   } finally {

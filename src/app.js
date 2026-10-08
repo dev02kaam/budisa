@@ -37,7 +37,8 @@ app.use(cookieParser());
 app.get('/health', (req, res) => {
   res.json({ ok: true, service: 'budisa' });
 });
-app.post('/tracker', express.json(trackerController.rawJsonOptions), trackerController.ingestTracker);
+app.post('/tracker', trackerController.beginTrackerReception,
+  express.json(trackerController.rawJsonOptions), trackerController.ingestTracker);
 app.use(express.json({ limit: '128kb' }));
 app.use(express.urlencoded({ extended: false, limit: '32kb', parameterLimit: 50 }));
 

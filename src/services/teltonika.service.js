@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { ingestGatewayPacket } = require('./tracker-gateway.service');
+const { recordTrackerReception } = require('./tracker-debug.service');
 
 function isUsableGps(gps) {
   return Number.isFinite(gps.latitude)
@@ -56,9 +57,18 @@ function buildDirectPayload({ imei, codecId, records }) {
 }
 
 async function ingestPacket(packet) {
+  const receivedAt = new Date();
+  const payload = buildDirectPayload(packet);
   try {
-    return await ingestGatewayPacket(buildDirectPayload(packet));
+    const accepted = await ingestGatewayPacket(payload);
+    await recordTrackerReception({ payload, receivedAt, transport: 'tcp',
+      rawFrameHex: packet.rawFrame?.toString('hex') || '',
+      statusCode: 200, response: { ok: true, accepted } });
+    return accepted;
   } catch (error) {
+    await recordTrackerReception({ payload, receivedAt, transport: 'tcp',
+      rawFrameHex: packet.rawFrame?.toString('hex') || '',
+      statusCode: error.statusCode || 500, response: { ok: false, code: error.code || 'INGEST_ERROR' } });
     if (error?.code === 'UNKNOWN_DEVICE') return 0;
     throw error;
   }

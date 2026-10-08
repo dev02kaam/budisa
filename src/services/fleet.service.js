@@ -453,6 +453,7 @@ async function getTrackerDayRoute({ imei, date } = {}) {
 }
 
 module.exports = {
+  buildMadridDayRange,
   connectionStatus,
   getFleet,
   getLiveActivity,

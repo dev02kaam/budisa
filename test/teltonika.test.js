@@ -115,6 +115,7 @@ async function run() {
   assert.equal(reply.readUInt32BE(1), 1);
   assert.equal(receivedPacket.imei, imei);
   assert.equal(receivedPacket.records[0].gps.latitude, 40.4168);
+  assert.deepEqual(receivedPacket.rawFrame, frame);
 
   await closeServer(server);
   console.log('ok - recibe IMEI y Codec 8 Extended por TCP');

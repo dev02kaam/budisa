@@ -7,6 +7,7 @@
   <link rel="icon" href="/assets/logoyfavicon.png" type="image/png" />
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="/css/styles.css" />
+  <link rel="stylesheet" href="/css/debug.css" />
 </head>
 <body data-theme="night">
   <!--
@@ -94,6 +95,10 @@
         <button class="nav-item" type="button" data-view="vehiculos">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3Zm0 3a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8Zm2 2h4v2h-4v-2Zm0 4h4v2h-4v-2Zm0 4h4v2h-4v-2Z"/></svg>
           <span>Vehículos</span>
+        </button>
+        <button class="nav-item" type="button" data-view="debug">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m8 3 2 3m6-3-2 3M9 9V8a3 3 0 0 1 6 0v1M8 10l-3-3m11 3 3-3M7 14H3m14 0h4M8 18l-3 3m11-3 3 3"/><rect x="7" y="9" width="10" height="12" rx="5"/><path d="M12 10v10"/></svg>
+          <span>Debug</span>
         </button>
       </nav>
 
@@ -364,6 +369,29 @@
         </section>
       </section>
 
+      <section class="view" id="view-debug" data-view="debug" hidden>
+        <section class="debug-panel" aria-labelledby="debugTitle">
+          <header class="section-header debug-header">
+            <div><h2 id="debugTitle">Envíos del tracker</h2><p>Registro continuo 24/7. Pulsa un envío para ver todos sus datos.</p></div>
+            <button class="quiet-button" id="debugRefresh" type="button">Actualizar</button>
+          </header>
+          <form class="debug-filters" id="debugFilters">
+            <label for="debugDate"><span>Fecha de recepción</span><input id="debugDate" type="date" /></label>
+            <label for="debugImei"><span>IMEI</span><input id="debugImei" type="search" inputmode="numeric" maxlength="15" pattern="[0-9]{15}" placeholder="Todos" autocomplete="off" /></label>
+            <button class="primary-button" type="submit">Filtrar</button>
+            <button class="quiet-button" id="debugClear" type="button">Quitar filtros</button>
+          </form>
+          <p class="debug-update-status" id="debugUpdateStatus" role="status" aria-live="polite">Cargando recepciones…</p>
+          <div class="debug-table-head" aria-hidden="true"><span>Recepción · Madrid</span><span>Tracker / IMEI</span><span>Registros</span><span>Resultado</span><span>Paquete</span></div>
+          <div id="debugPacketList"><div class="empty-state"><strong>Cargando envíos…</strong></div></div>
+          <div class="debug-pagination">
+            <button class="quiet-button" id="debugLatest" type="button" hidden>Volver a recientes</button>
+            <span id="debugPageSummary"></span>
+            <button class="quiet-button" id="debugOlder" type="button" hidden>Envíos anteriores</button>
+          </div>
+        </section>
+      </section>
+
       <footer class="app-footer">
         <span>© Budisa</span><a href="https://kaam.es" target="_blank" rel="noreferrer noopener">Kaam Innovación y Tecnología</a>
       </footer>
@@ -380,8 +408,31 @@
     </article>
   </dialog>
 
+  <dialog class="route-dialog debug-dialog" id="debugPacketDialog" aria-labelledby="debugPacketTitle">
+    <article>
+      <header class="route-dialog-header">
+        <div><h2 id="debugPacketTitle">Paquete del tracker</h2><p id="debugPacketMeta">Recepción registrada</p></div>
+        <button id="debugPacketClose" type="button" aria-label="Cerrar paquete">×</button>
+      </header>
+      <div class="debug-dialog-body">
+        <p id="debugPacketStatus" role="status" aria-live="polite"></p>
+        <button class="quiet-button" id="debugPacketRetry" type="button" hidden>Reintentar</button>
+        <div id="debugPacketContent" hidden>
+          <dl class="debug-packet-summary" id="debugPacketSummary"></dl>
+          <div class="debug-payload-heading"><h3>Datos completos del envío</h3><button class="quiet-button" id="debugCopy" type="button">Copiar JSON</button></div>
+          <pre class="debug-json" id="debugPayload" tabindex="0" aria-label="Datos completos del envío"></pre>
+          <h3>Respuesta de Budisa</h3>
+          <pre class="debug-json" id="debugResponse" tabindex="0" aria-label="Respuesta de Budisa"></pre>
+          <details class="debug-raw"><summary>Cuerpo original recibido</summary><pre class="debug-json" id="debugRawBody" tabindex="0"></pre></details>
+          <details class="debug-raw" id="debugFrameSection" hidden><summary>Trama TCP original · hexadecimal</summary><pre class="debug-json" id="debugRawFrame" tabindex="0"></pre></details>
+        </div>
+      </div>
+    </article>
+  </dialog>
+
   <script src="/js/api.js"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/js/debug.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>
