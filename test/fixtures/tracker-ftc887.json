@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "source": "teltonika-gateway",
+  "device": { "manufacturer": "Teltonika", "model": "FTC887", "imei": "861327082921177" },
+  "packet": {
+    "packetId": "122be55b56735008196afd17b4d7219adc5efd0b652fcf0dd7d0c6db3ce26b8b",
+    "codec": "8E", "recordCount": 1, "receivedAt": "2026-10-08T11:57:22.780Z"
+  },
+  "records": [{
+    "index": 0, "timestampMs": 1791460627000, "timestamp": "2026-10-08T11:57:07.000Z", "priority": 0,
+    "gps": { "latitude": 38.9941633, "longitude": -1.8547316, "altitudeM": 621, "angleDeg": 0, "satellites": 15, "speedKph": 0, "valid": true },
+    "io": {
+      "eventId": 0,
+      "raw": { "16": 7000, "21": 4, "66": 24061, "67": 4109, "68": 0, "69": 1, "181": 13, "182": 10, "200": 0, "239": 1, "240": 0, "241": 21401 },
+      "known": { "totalOdometerM": 7000, "gsmSignal": 4, "batteryVoltageMv": 4109, "batteryCurrentMa": 0, "gnssStatus": 1, "gnssPdop": 13, "gnssHdop": 10, "ignition": true, "movement": false, "gsmOperatorCode": 21401 }
+    },
+    "eventId": "6a216a1cc6ff41dde222024573dc5a4dcf83b890d6a0548393cb89a218f55787"
+  }]
+}

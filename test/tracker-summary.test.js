@@ -1,0 +1,77 @@
+const assert = require('node:assert/strict');
+const { summarize, classify } = require('../public/js/tracker-summary');
+const payload = require('./fixtures/tracker-ftc887.json');
+const original = JSON.stringify(payload);
+const [sample] = summarize(payload);
+const rows = (summary) => [...summary.sensors, ...summary.sections].flatMap((section) => section.rows);
+const value = (summary, label) => rows(summary).find((row) => row.label === label)?.value;
+const reading = (gps = {}, io = {}) => summarize({ records: [{ gps, io }] })[0];
+
+assert.equal(sample.eyePresent, false);
+assert.match(sample.eyeMessage, /No llegan lecturas del EYE/);
+assert.match(sample.eyeNote, /no confirma que esté desconectado/);
+assert.equal(sample.timestamp, '2026-10-08T11:57:07.000Z');
+assert.equal(value(sample, 'Ubicación GPS'), 'Posición disponible');
+assert.equal(value(sample, 'Coordenadas'), 'Latitud 38,9941633 · Longitud -1,8547316');
+assert.equal(value(sample, 'Velocidad'), '0 km/h');
+assert.equal(value(sample, 'Movimiento'), 'Sin movimiento detectado');
+assert.equal(value(sample, 'Contacto'), 'Activado');
+assert.equal(value(sample, 'Odómetro del tracker'), '7 km');
+assert.equal(value(sample, 'Alimentación externa'), '24,061 V');
+assert.equal(value(sample, 'Batería interna del tracker'), '4,109 V');
+assert.equal(value(sample, 'Corriente de batería'), '0 mA');
+assert.equal(value(sample, 'Cobertura móvil'), '4 de 5');
+assert.equal(value(sample, 'Operador móvil'), '21401');
+assert.match(rows(sample).find((row) => row.label === 'Rumbo GPS').note, /no mide la inclinación del EYE/);
+assert.equal(JSON.stringify(payload), original, 'Summary must preserve the original payload');
+assert.deepEqual(classify(payload), ['gps'], 'GPS direction must not count as a tipping angle');
+const contentOf = (record) => classify({ records: [record] });
+assert.deepEqual(contentOf({ io: { known: { tipperRaised: false } } }), ['tipper'], 'Lowering data must remain filterable without GPS');
+assert.deepEqual(contentOf({ io: { known: { tipperRaised: ' CLOSED ' } } }), ['tipper']);
+assert.deepEqual(contentOf({ io: { known: { tiltAngleDeg: 33 } } }), ['tipper'], 'A valid angle remains telemetry even between state thresholds');
+assert.deepEqual(contentOf({ io: { raw: { 10832: 0 } } }), ['tipper']);
+assert.deepEqual(contentOf({ io: { raw: { 10832: 65501 } } }), ['tipper']);
+assert.deepEqual(contentOf({ io: { raw: { 10833: 35 } } }), ['tipper']);
+assert.deepEqual(contentOf({ io: { raw: { 10816: 236 } } }), ['tipper']);
+assert.deepEqual(contentOf({ io: { raw: { 10832: 250 } } }), []);
+assert.deepEqual(contentOf({ io: { raw: { 10832: 251 } } }), []);
+assert.deepEqual(contentOf({ io: { raw: { 25: 250, 67: 4109, 10820: 0 } } }), [], 'Battery and temperature alone do not identify tipping');
+assert.deepEqual(contentOf({ gps: { latitude: 0, longitude: 0, valid: true } }), []);
+assert.deepEqual(contentOf({ gps: { latitude: 1, longitude: 2, valid: false, satellites: 15 } }), []);
+assert.deepEqual(contentOf({ gps: { latitude: 1, longitude: 2, valid: true }, io: { raw: { 69: 0 } } }), []);
+assert.deepEqual(classify({ records: [payload.records[0], { io: { raw: { 10832: 35 } } }] }), ['gps', 'tipper'], 'Types can occur in different records of the same packet');
+assert.deepEqual(classify(null), []);
+assert.deepEqual(classify({ records: [null, {}, 1, 'bad'] }), []);
+
+for (const [raw, expected] of [[35, '35°'], [65501, '-35°'], [-30, '-30°'], [0, '0°']]) {
+  const eye = reading({ angleDeg: 120 }, { raw: { 10832: raw } });
+  assert.equal(eye.eyePresent, true);
+  assert.equal(value(eye, 'Inclinación lateral (Roll)'), expected);
+}
+for (const raw of [250, 251, 181, null, '', true, {}]) {
+  assert.match(value(reading({}, { raw: { 10832: raw } }), 'Inclinación lateral (Roll)'), /Sin ángulo válido/);
+}
+const axes = reading({}, { raw: { 10832: 35, 10833: 10, 10816: 236, 10820: 0 } });
+assert.equal(axes.sensors[0].rows[0].value, '35°');
+assert.equal(value(axes, 'Inclinación adelante / atrás (Pitch)'), '-20°');
+assert.equal(axes.sensors[1].rows[0].value, '10°');
+assert.equal(value(axes, 'Aviso de batería baja del sensor'), 'No hay aviso de batería baja');
+const bluetooth = reading({}, { raw: { 25: 65511, 86: 500 } });
+assert.equal(bluetooth.eyePresent, false);
+assert.equal(value(bluetooth, 'Temperatura del sensor'), '-2,5 °C');
+assert.equal(value(bluetooth, 'Humedad del sensor'), '50 %');
+assert.match(bluetooth.eyeMessage, /sensores Bluetooth/);
+assert.equal(value(reading({}, { known: { tiltAngleDeg: 32 } }), 'Ángulo de inclinación'), '32°');
+assert.equal(reading({}, { known: { tiltAngleDeg: 32 } }).eyePresent, false);
+assert.equal(reading({}, { known: { eyeAngleDeg: 32 } }).eyePresent, true);
+assert.equal(reading({}, { known: { tiltAngleDeg: 32, eyeAngleDeg: 15 } }).eyePresent, false);
+assert.equal(value(reading({ speedKph: null }, {}), 'Velocidad'), 'No enviado');
+assert.equal(value(reading({ latitude: 1, longitude: 2 }, {}), 'Ubicación GPS'), 'Sin posición GPS confirmada');
+assert.equal(value(reading({ latitude: 1, longitude: 2, valid: false }, { raw: { 69: 1 } }), 'Ubicación GPS'), 'Sin posición GPS confirmada');
+assert.equal(value(reading({ latitude: 0, longitude: 0, valid: true }, {}), 'Ubicación GPS'), 'Sin posición GPS confirmada');
+assert.equal(value(reading({}, { raw: { 99999: 7 }, known: { unexpected: '<script>test</script>' } }), 'Dato adicional del tracker (ID 99999)'), '7');
+assert.equal(value(reading({}, { raw: { 99999: 7 }, known: { unexpected: '<script>test</script>' } }), 'Otro dato recibido: unexpected'), '<script>test</script>');
+assert.deepEqual(summarize(null), []);
+assert.deepEqual(summarize({ records: {} }), []);
+assert.equal(summarize({ records: [null, ...payload.records] }).length, 2);
+console.log('ok - resumen y tipos distinguen GPS, basculación, EYE, ejes y datos ausentes sin alterar el JSON');

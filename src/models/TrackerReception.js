@@ -11,6 +11,8 @@ const TrackerReceptionSchema = new mongoose.Schema({
   statusCode: { type: Number, required: true },
   code: { type: String, default: '' },
   diagnosticCode: { type: String, default: '' },
+  // Undefined distinguishes receptions captured before content filtering was added.
+  contentTypes: { type: [{ type: String, enum: ['gps', 'tipper'] }], default: undefined },
   response: { type: mongoose.Schema.Types.Mixed, required: true },
   // Preserve every original field, including fields omitted by operational normalization.
   rawBody: { type: String, default: '', select: false },
@@ -19,5 +21,6 @@ const TrackerReceptionSchema = new mongoose.Schema({
 
 TrackerReceptionSchema.index({ receivedAt: -1, _id: -1 });
 TrackerReceptionSchema.index({ imei: 1, receivedAt: -1, _id: -1 });
+TrackerReceptionSchema.index({ contentTypes: 1, receivedAt: -1, _id: -1 });
 
 module.exports = mongoose.model('TrackerReception', TrackerReceptionSchema, 'tracker_receptions');

@@ -378,8 +378,10 @@
           <form class="debug-filters" id="debugFilters">
             <label for="debugDate"><span>Fecha de recepción</span><input id="debugDate" type="date" /></label>
             <label for="debugImei"><span>IMEI</span><input id="debugImei" type="search" inputmode="numeric" maxlength="15" pattern="[0-9]{15}" placeholder="Todos" autocomplete="off" /></label>
+            <label for="debugType"><span>Datos recibidos</span><select id="debugType"><option value="">Todos los envíos</option><option value="gps">GPS</option><option value="tipper">Basculación</option></select></label>
             <button class="primary-button" type="submit">Filtrar</button>
             <button class="quiet-button" id="debugClear" type="button">Quitar filtros</button>
+            <p class="debug-filter-help">Un envío puede incluir ambos. Basculación muestra ángulos o estados del cajón, también sin GPS.</p>
           </form>
           <p class="debug-update-status" id="debugUpdateStatus" role="status" aria-live="polite">Cargando recepciones…</p>
           <div class="debug-table-head" aria-hidden="true"><span>Recepción · Madrid</span><span>Tracker / IMEI</span><span>Registros</span><span>Resultado</span><span>Paquete</span></div>
@@ -421,6 +423,10 @@
           <dl class="debug-packet-summary" id="debugPacketSummary"></dl>
           <div class="debug-payload-heading"><h3>Datos completos del envío</h3><button class="quiet-button" id="debugCopy" type="button">Copiar JSON</button></div>
           <pre class="debug-json" id="debugPayload" tabindex="0" aria-label="Datos completos del envío"></pre>
+          <section class="debug-human-summary" aria-labelledby="debugHumanTitle">
+            <h3 id="debugHumanTitle">Este envío, en claro</h3>
+            <div id="debugHumanSummary"></div>
+          </section>
           <h3>Respuesta de Budisa</h3>
           <pre class="debug-json" id="debugResponse" tabindex="0" aria-label="Respuesta de Budisa"></pre>
           <details class="debug-raw"><summary>Cuerpo original recibido</summary><pre class="debug-json" id="debugRawBody" tabindex="0"></pre></details>
@@ -432,6 +438,7 @@
 
   <script src="/js/api.js"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/js/tracker-summary.js"></script>
   <script src="/js/debug.js"></script>
   <script src="/js/app.js"></script>
 </body>

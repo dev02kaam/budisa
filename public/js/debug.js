@@ -1,6 +1,6 @@
 (() => {
   const el = (id) => document.getElementById(id);
-  const state = { items: [], nextCursor: null, before: '', date: '', imei: '',
+  const state = { items: [], nextCursor: null, before: '', date: '', imei: '', type: '',
     request: null, detailRequest: null, loaded: false, error: '', updatedAt: null,
     packet: null, packetId: '', trigger: null };
   const escape = (value) => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;')
@@ -32,7 +32,7 @@
         <span data-label="Registros">${packet.accepted} / ${packet.recordCount}<small>aceptados / recibidos</small></span>
         <span data-label="Resultado"><span class="state-badge ${packet.statusCode < 300 ? 'is-approved' : 'is-debug-rejected'}">${escape(result(packet))}</span><small>${packet.transport === 'https' ? 'HTTP ' : 'Código '}${packet.statusCode}</small></span>
         <span class="debug-packet-action">Abrir paquete <span aria-hidden="true">→</span></span>
-      </button>`).join('') : `<div class="empty-state"><strong>${state.request ? 'Cargando envíos…' : state.error ? 'No se pueden consultar los envíos' : 'Todavía no hay envíos'}</strong><p>${state.date || state.imei ? 'No hay recepciones que coincidan con estos filtros.' : 'Las nuevas recepciones aparecerán aquí, también cuando sean rechazadas.'}</p></div>`;
+      </button>`).join('') : `<div class="empty-state"><strong>${state.request ? 'Cargando envíos…' : state.error ? 'No se pueden consultar los envíos' : state.date || state.imei || state.type ? 'No hay envíos con estos filtros' : 'Todavía no hay envíos'}</strong><p>${state.date || state.imei || state.type ? 'Cambia los filtros o pulsa Quitar filtros para ver todos los envíos.' : 'Las nuevas recepciones aparecerán aquí, también cuando sean rechazadas.'}</p></div>`;
     const list = el('debugPacketList');
     if (list.innerHTML !== markup) {
       const focusedPacketId = list.contains(document.activeElement)
@@ -47,6 +47,21 @@
       .find((button) => button.dataset.debugId === id);
   }
 
+  function renderHumanSummary(payload) {
+    const readings = window.trackerPacketSummary.summarize(payload);
+    if (!readings.length) {
+      el('debugHumanSummary').innerHTML = '<p class="debug-human-note">No hay lecturas que se puedan resumir. Puedes revisar el cuerpo original recibido.</p>';
+      return;
+    }
+    const renderSection = (section) => `<section class="debug-human-group"><h4>${escape(section.title)}</h4><dl>${section.rows.map((row) =>
+      `<div><dt>${escape(row.label)}</dt><dd>${escape(row.value)}${row.note ? `<small>${escape(row.note)}</small>` : ''}</dd></div>`).join('')}</dl></section>`;
+    const renderReading = (reading) => `<p class="debug-eye-message ${reading.eyePresent ? 'has-eye-data' : ''}"><strong>${escape(reading.eyeMessage)}</strong><span>${escape(reading.eyeNote)}</span></p>
+      <p class="debug-human-note">Lectura del tracker: ${escape(dateTime(reading.timestamp))} · Hora de Madrid</p>
+      ${[...reading.sensors, ...reading.sections].map(renderSection).join('')}`;
+    el('debugHumanSummary').innerHTML = readings.length === 1 ? renderReading(readings[0])
+      : readings.map((reading, index) => `<details class="debug-human-reading" ${index === 0 ? 'open' : ''}><summary>Lectura ${index + 1} de ${readings.length} · ${escape(dateTime(reading.timestamp))}</summary>${renderReading(reading)}</details>`).join('');
+  }
+
   async function load({ automatic = false } = {}) {
     if (state.request || (automatic && state.before)) return;
     const controller = new AbortController();
@@ -55,6 +70,7 @@
     const query = new URLSearchParams();
     if (state.imei) query.set('imei', state.imei);
     if (state.date) query.set('date', state.date);
+    if (state.type) query.set('type', state.type);
     if (state.before) query.set('before', state.before);
     render();
     try {
@@ -111,6 +127,7 @@
       ];
       el('debugPacketSummary').innerHTML = fields.map(([label, value]) => `<div><dt>${escape(label)}</dt><dd>${escape(value)}</dd></div>`).join('');
       el('debugPayload').textContent = packet.payload === null ? (packet.rawBody || 'Sin cuerpo JSON disponible.') : JSON.stringify(packet.payload, null, 2);
+      renderHumanSummary(packet.payload);
       el('debugResponse').textContent = JSON.stringify(packet.response, null, 2);
       el('debugRawBody').textContent = packet.rawBody || 'Sin cuerpo disponible.';
       el('debugRawFrame').textContent = packet.rawFrameHex || '';
@@ -150,20 +167,26 @@
     state.updatedAt = null;
     el('debugPacketList').replaceChildren();
     // Clear received payloads when the private session ends.
-    ['debugPayload', 'debugResponse', 'debugRawBody', 'debugRawFrame', 'debugPacketSummary'].forEach((id) => el(id).textContent = '');
+    ['debugPayload', 'debugResponse', 'debugRawBody', 'debugRawFrame', 'debugPacketSummary', 'debugHumanSummary'].forEach((id) => el(id).textContent = '');
   }
 
   el('debugRefresh').addEventListener('click', () => load());
-  el('debugFilters').addEventListener('submit', (event) => {
-    event.preventDefault();
+  function applyFilters() {
     state.date = el('debugDate').value;
     state.imei = el('debugImei').value.trim();
+    state.type = el('debugType').value;
     changePage();
+  }
+  el('debugType').addEventListener('change', applyFilters);
+  el('debugFilters').addEventListener('submit', (event) => {
+    event.preventDefault();
+    applyFilters();
   });
   el('debugClear').addEventListener('click', () => {
     el('debugFilters').reset();
     state.date = '';
     state.imei = '';
+    state.type = '';
     changePage();
   });
   el('debugOlder').addEventListener('click', () => changePage(state.nextCursor));

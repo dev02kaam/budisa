@@ -26,6 +26,7 @@ module.exports = async function trackerDebugCases({ baseUrl, adminHeaders, build
   assert.equal(reception.accepted, 2);
   assert.equal(reception.statusCode, 200);
   assert.equal(reception.transport, 'https');
+  assert.deepEqual(reception.contentTypes, ['gps', 'tipper']);
   assert.ok(reception.receivedAt);
   assert.equal('rawBody' in reception, false);
   assert.equal('payload' in reception, false);
@@ -60,7 +61,7 @@ module.exports = async function trackerDebugCases({ baseUrl, adminHeaders, build
   const invalidItem = (await getPage()).data.items.find((item) => item.code === 'INVALID_PAYLOAD');
   assert.deepEqual((await detail(invalidItem._id)).data.payload, invalidPayload);
 
-  for (const query of ['?imei=bad', '?date=2026-02-30', '?date=2026-10-08&date=2026-10-09', '?before=bad']) {
+  for (const query of ['?imei=bad', '?date=2026-02-30', '?date=2026-10-08&date=2026-10-09', '?before=bad', '?type=invalid', '?type=gps&type=tipper']) {
     assert.equal((await fetch(`${debugUrl}${query}`, { headers: adminHeaders })).status, 400);
   }
   assert.equal((await fetch(`${debugUrl}/invalid`, { headers: adminHeaders })).status, 400);
@@ -82,6 +83,46 @@ module.exports = async function trackerDebugCases({ baseUrl, adminHeaders, build
   assert.equal(secondPage.nextCursor, null);
   assert.equal(new Set([...firstPage.items, ...secondPage.items].map((item) => item._id)).size, 61);
   assert.deepEqual((await getPage('?date=2026-01-01')).data.items, []);
+
+  // Filter all stored packets, including legacy packets beyond the first 200 rows.
+  const contentImei = '356000000000091';
+  const contentBase = Date.parse('2026-01-08T23:00:00Z'); // Midnight in Madrid on January 9.
+  const gpsRecord = require('./fixtures/tracker-ftc887.json').records[0];
+  const tipperRecord = { gps: { latitude: 0, longitude: 0, valid: false }, io: { raw: { 10832: 0 } } };
+  const invalidRecord = { gps: { latitude: 40.4, longitude: -3.7, valid: false, angleDeg: 35 }, io: { raw: { 10832: 250, 25: 250 } } };
+  const contentFixture = (records, offset) => ({ ...fixture(contentBase + offset), imei: contentImei,
+    recordCount: records.length, rawBody: JSON.stringify({ records }) });
+  await TrackerReception.insertMany([
+    ...Array.from({ length: 61 }, () => contentFixture([gpsRecord], 0)), // Identical dates exercise the ID cursor.
+    ...Array.from({ length: 61 }, (_, index) => contentFixture([{ ...tipperRecord, io: { raw: { 10832: index % 2 ? 65501 : 0 } } }], 1000 + index)),
+    contentFixture([gpsRecord, tipperRecord], 2000),
+    ...Array.from({ length: 210 }, (_, index) => contentFixture([invalidRecord], 3000 + index)),
+    contentFixture([gpsRecord, tipperRecord], -1),
+    contentFixture([gpsRecord, tipperRecord], 86_400_000)
+  ]);
+  const contentQuery = `?imei=${contentImei}&date=2026-01-09`;
+  const gpsPage = (await getPage(`${contentQuery}&type=gps`)).data;
+  assert.equal(gpsPage.items.length, 50);
+  assert.ok(gpsPage.nextCursor);
+  const olderGps = (await getPage(`${contentQuery}&type=gps&before=${gpsPage.nextCursor}`)).data;
+  assert.equal(olderGps.items.length, 12);
+  assert.equal(olderGps.nextCursor, null);
+  assert.equal(new Set([...gpsPage.items, ...olderGps.items].map((row) => row._id)).size, 62);
+  const tipperPage = (await getPage(`${contentQuery}&type=tipper`)).data;
+  const olderTipper = (await getPage(`${contentQuery}&type=tipper&before=${tipperPage.nextCursor}`)).data;
+  assert.equal(tipperPage.items.length, 50);
+  assert.equal(olderTipper.items.length, 12);
+  assert.equal(olderTipper.nextCursor, null);
+  assert.equal(new Set([...tipperPage.items, ...olderTipper.items].map((row) => row._id)).size, 62);
+  for (const row of [...gpsPage.items, ...olderGps.items, ...tipperPage.items, ...olderTipper.items]) {
+    assert.equal('rawBody' in row, false);
+    assert.equal('response' in row, false);
+  }
+  const both = gpsPage.items.find((row) => row.contentTypes.includes('tipper'));
+  assert.ok(tipperPage.items.some((row) => row._id === both._id), 'A packet containing both types appears in both filters');
+  assert.deepEqual((await detail(both._id)).data.payload.records, [gpsRecord, tipperRecord], 'Classification preserves every original reading');
+  assert.equal(await TrackerReception.countDocuments({ imei: contentImei, contentTypes: { $exists: false } }), 2, 'Only packets inside the requested date range are backfilled');
+  assert.deepEqual((await getPage(`${contentQuery}&type=tipper`)).data.items.map((row) => row._id), tipperPage.items.map((row) => row._id), 'Cached classification retains ordering');
 
   // Local TCP includes the complete binary frame as well as its decoded payload.
   const rawFrame = Buffer.from('000000000000004A8E010000016B412CEE000100000000000000000000000000000000010005000100010100010011001D00010010015E2C880002000B000000003544C87A000E000000001DD7E06A00000100002994', 'hex');
@@ -106,5 +147,5 @@ module.exports = async function trackerDebugCases({ baseUrl, adminHeaders, build
     TrackerReception.create = originalCreate;
     console.error = originalConsoleError;
   }
-  console.log('ok - debug conserva recepciones, rechazos, JSON original, fechas Madrid, páginas y TCP');
+  console.log('ok - debug conserva recepciones y filtra GPS/basculación en históricos, fechas Madrid y páginas completas');
 };
