@@ -116,11 +116,11 @@ El hash y la firma se calculan sobre los bytes JSON enviados, no sobre una seria
 
 Para alimentar el histórico operativo, cada registro puede incluir `io.known.movement`. Las basculaciones se reconstruyen emparejando la lectura de subida con la de bajada, por IMEI y hora del dispositivo. Se reconoce `io.known.tipperRaised`, los ángulos normalizados como `tiltAngleDeg` y el ángulo **Roll del EYE Sensor 1** recibido en `io.raw[10832]` (entero de 16 bits con signo). Referencia: [tabla AVL del FTC887](https://wiki.teltonika-gps.com/view/FTC887_Teltonika_Data_Sending_Parameters_ID).
 
-Los umbrales provisionales para la configuración del sensor en pruebas son **35° para abrir** y **30° para cerrar**, usando el valor absoluto del ángulo. Entre ambos se mantiene el estado anterior. Se pueden ajustar en el entorno y reiniciar el servidor:
+Los umbrales de basculación son **40° para abrir** y **20° para cerrar**, usando el valor absoluto del ángulo. Entre ambos se mantiene el estado anterior. Estos umbrales controlan los ciclos del histórico; el filtro de Debug muestra cualquier lectura válida de basculación, aunque no alcance 40°. Se pueden ajustar en el entorno y reiniciar el servidor:
 
 ```env
-TIPPER_RAISE_ANGLE_DEG=35
-TIPPER_LOWER_ANGLE_DEG=30
+TIPPER_RAISE_ANGLE_DEG=40
+TIPPER_LOWER_ANGLE_DEG=20
 ```
 
 Debe cumplirse `0 <= TIPPER_LOWER_ANGLE_DEG < TIPPER_RAISE_ANGLE_DEG <= 180`. Los avisos booleanos explícitos del gateway tienen prioridad sobre el ángulo. Esta integración usa el Roll del sensor 1; no mezcla sensores ni ejes distintos. Los umbrales deben concordar con la configuración del EYE y su montaje.

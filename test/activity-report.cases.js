@@ -16,14 +16,14 @@ module.exports = async function checkActivityReport({ baseUrl, adminHeaders }) {
     ['08:50', 40, true, true], // Start outside the live window.
     ['09:05', 20, true, true],
     ['09:06', null, false, true],
-    ['09:07', 35, false, true],
+    ['09:07', 40, false, true],
     ['09:08', 32, false, true],
-    ['09:09', 30, false, true],
+    ['09:09', 20, false, true],
     ['09:10', null, null, false],
     ['09:11', null, null, true],
     ['09:12', null, true, true],
     ['09:13', null, true, true],
-    ['09:40', 35, false, false],
+    ['09:40', 40, false, false],
     ['10:01', 20, true, true] // Future record must not close the live event yet.
   ];
   await TrackerPoint.insertMany(readings.map(([time, roll, movement, gpsValid], index) => ({
@@ -90,7 +90,7 @@ module.exports = async function checkActivityReport({ baseUrl, adminHeaders }) {
   const multipage = await createReportPdf([{ ...sample, tipEvents: Array.from({ length: 16 }, () => sample.tipEvents[0]) }]);
   assert.equal(pageCount(multipage), 2, 'Long tables paginate without blank footer pages');
   await TrackerPoint.insertMany([
-    ['21T10:00', 35], ['22T10:00', 30], ['23T10:00', 35], ['23T10:01', 30]
+    ['21T10:00', 40], ['22T10:00', 20], ['23T10:00', 40], ['23T10:01', 20]
   ].map(([time, roll], index) => ({
     eventId: `report-gap-${index}`, deviceId: imei, positionAt: new Date(`2026-09-${time}:00Z`),
     gps: { latitude: 40.4 + index / 1000, longitude: -3.7 }, metadata: { gpsValid: true, rawIo: { 10832: roll } }

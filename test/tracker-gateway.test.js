@@ -8,8 +8,8 @@ process.env.TRACKER_KEY_ID = 'gateway-v1';
 process.env.APP_LOGIN_USER = 'admin';
 process.env.APP_LOGIN_PASSWORD = 'test-login-password';
 process.env.APP_COOKIE_SECURE = 'false';
-process.env.TIPPER_RAISE_ANGLE_DEG = '35';
-process.env.TIPPER_LOWER_ANGLE_DEG = '30';
+process.env.TIPPER_RAISE_ANGLE_DEG = '40';
+process.env.TIPPER_LOWER_ANGLE_DEG = '20';
 
 const app = require('../src/app');
 const { connectDb, disconnectDb } = require('../src/config/db');

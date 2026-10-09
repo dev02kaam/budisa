@@ -42,8 +42,8 @@ const config = {
   appLoginPassword: process.env.APP_LOGIN_PASSWORD || '',
   appSessionHours: readPositiveInteger('APP_SESSION_HOURS', 12),
   appCookieSecure: readBoolean('APP_COOKIE_SECURE', process.env.NODE_ENV === 'production'),
-  tipperRaiseAngleDeg: Number(process.env.TIPPER_RAISE_ANGLE_DEG ?? 35),
-  tipperLowerAngleDeg: Number(process.env.TIPPER_LOWER_ANGLE_DEG ?? 30),
+  tipperRaiseAngleDeg: Number(process.env.TIPPER_RAISE_ANGLE_DEG ?? 40),
+  tipperLowerAngleDeg: Number(process.env.TIPPER_LOWER_ANGLE_DEG ?? 20),
   mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/budisa',
   useMemoryMongo: readBoolean('USE_MEMORY_MONGO', false),
   nodeEnv: process.env.NODE_ENV || 'development'

@@ -5,11 +5,18 @@ const { registerTracker } = require('../src/services/tracker-gateway.service');
 
 module.exports = async function checkEyeSensor({ baseUrl, adminHeaders, buildPayload, signedRequest }) {
   const angle = (value) => tipperState({ metadata: { rawIo: { 10832: value } } });
-  assert.deepEqual(angle(35), { raised: true, angleDeg: 35 });
-  assert.deepEqual(angle(30), { raised: false, angleDeg: 30 });
+  assert.deepEqual(angle(40), { raised: true, angleDeg: 40 });
+  assert.deepEqual(angle(20), { raised: false, angleDeg: 20 });
+  for (const value of [21, 30, 35, 39]) {
+    assert.deepEqual(angle(value), { raised: null, angleDeg: value });
+  }
   assert.deepEqual(angle(32), { raised: null, angleDeg: 32 });
-  assert.deepEqual(angle(65501), { raised: true, angleDeg: -35 });
-  assert.deepEqual(angle(-30), { raised: false, angleDeg: -30 });
+  assert.deepEqual(angle(65496), { raised: true, angleDeg: -40 });
+  assert.deepEqual(angle(-20), { raised: false, angleDeg: -20 });
+  assert.deepEqual(angle(65516), { raised: false, angleDeg: -20 });
+  assert.deepEqual(angle(65501), { raised: null, angleDeg: -35 });
+  assert.deepEqual(tipperState({ metadata: { knownIo: { tiltAngleDeg: 40 } } }), { raised: true, angleDeg: 40 });
+  assert.deepEqual(tipperState({ metadata: { knownIo: { tiltAngleDeg: 20 } } }), { raised: false, angleDeg: 20 });
   for (const value of [null, '', ' ', true, {}, 250, 251, 181, 32768, Infinity, NaN]) {
     assert.equal(angle(value), null, `Invalid sensor value ${String(value)}`);
   }
@@ -51,6 +58,8 @@ module.exports = async function checkEyeSensor({ baseUrl, adminHeaders, buildPay
     { time: '2026-09-18T08:43:58Z' },
     { time: '2026-09-18T08:44:03Z', roll: 250 },
     { time: '2026-09-18T08:44:08Z', roll: 32 },
+    { time: '2026-09-18T08:44:10Z', roll: 30 },
+    { time: '2026-09-18T08:44:11Z', roll: 21 },
     { time: '2026-09-18T08:44:13Z', roll: 74 },
     { time: '2026-09-18T08:44:18Z' }
   ]);
@@ -79,11 +88,11 @@ module.exports = async function checkEyeSensor({ baseUrl, adminHeaders, buildPay
   assert.equal(day.gpsPointCount, 1);
 
   // Close arrives before start: reconstruction uses device time and stays idempotent.
-  await send(imei, [{ time: '2026-09-18T08:46:53Z', roll: 30 }]);
-  await send(imei, [{ time: '2026-09-18T08:45:53Z', roll: 35, gps: true }]);
+  await send(imei, [{ time: '2026-09-18T08:46:53Z', roll: 20 }]);
+  await send(imei, [{ time: '2026-09-18T08:45:53Z', roll: 40, gps: true }]);
   await send(imei, [
-    { time: '2026-09-18T08:47:53Z', roll: 65501 },
-    { time: '2026-09-18T08:48:23Z', roll: 65506 }
+    { time: '2026-09-18T08:47:53Z', roll: 65496 },
+    { time: '2026-09-18T08:48:23Z', roll: 65516 }
   ]);
   day = (await days(imei))[0];
   assert.deepEqual(day.tipEvents.map((event) => event.durationSeconds), [61, 60, 30]);
@@ -93,10 +102,10 @@ module.exports = async function checkEyeSensor({ baseUrl, adminHeaders, buildPay
   const midnightImei = '356000000000802';
   await registerTracker({ imei: midnightImei, licensePlate: '0802 EYE' });
   await send(midnightImei, [
-    { time: '2026-09-18T21:59:50Z', roll: 35 },
+    { time: '2026-09-18T21:59:50Z', roll: 40 },
     { time: '2026-09-18T22:00:02Z', roll: 45 },
     { time: '2026-09-18T22:00:05Z', roll: 251 },
-    { time: '2026-09-18T22:00:10Z', roll: 30 }
+    { time: '2026-09-18T22:00:10Z', roll: 20 }
   ]);
   const startDay = (await days(midnightImei))[0];
   assert.equal(startDay.tipEvents.length, 1);
@@ -111,10 +120,11 @@ module.exports = async function checkEyeSensor({ baseUrl, adminHeaders, buildPay
   const idleImei = '356000000000803';
   await registerTracker({ imei: idleImei, licensePlate: '0803 EYE' });
   await send(idleImei, [
-    { time: '2026-09-18T08:00:00Z', roll: 30 },
-    { time: '2026-09-18T08:01:00Z', roll: 34 },
-    { time: '2026-09-18T08:02:00Z', roll: 30 }
+    { time: '2026-09-18T08:00:00Z', roll: 20 },
+    { time: '2026-09-18T08:01:00Z', roll: 35 },
+    { time: '2026-09-18T08:01:30Z', roll: 39 },
+    { time: '2026-09-18T08:02:00Z', roll: 20 }
   ]);
   assert.equal((await days(idleImei))[0].tipEvents.length, 0);
-  console.log('ok - EYE empareja subida/bajada sin GPS, respeta 35/30 grados, duplicados, orden y medianoche');
+  console.log('ok - EYE empareja subida/bajada sin GPS, respeta 40/20 grados, duplicados, orden y medianoche');
 };
