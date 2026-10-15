@@ -1,5 +1,6 @@
 const express = require('express');
 const api = require('../controllers/api.controller');
+const { requireSupportSession } = require('../middleware/app-auth.middleware');
 
 const router = express.Router();
 
@@ -10,8 +11,8 @@ router.get('/tracker/live', api.liveActivity);
 router.post('/tracker/report', api.exportReport);
 router.get('/tracker/route', api.trackerDayRoute);
 router.get('/tracker/status', api.trackerStatus);
-router.get('/tracker/debug', api.trackerDebug);
-router.get('/tracker/debug/:id', api.trackerDebugPacket);
+router.get('/tracker/debug', requireSupportSession, api.trackerDebug);
+router.get('/tracker/debug/:id', requireSupportSession, api.trackerDebugPacket);
 router.get('/trackers', api.trackers);
 router.post('/trackers', api.registerTrackerDevice);
 router.post('/trackers/import', api.importTrackerDevices);

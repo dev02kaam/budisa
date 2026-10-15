@@ -13,6 +13,12 @@ const AppSessionSchema = new mongoose.Schema(
       required: true,
       maxlength: 80
     },
+    role: {
+      type: String,
+      enum: ['admin', 'support'],
+      default: 'admin',
+      required: true
+    },
     csrfToken: {
       type: String,
       required: true

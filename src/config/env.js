@@ -40,6 +40,8 @@ const config = {
   trackerSignatureToleranceSeconds: Number(process.env.TRACKER_SIGNATURE_TOLERANCE_SECONDS || 300),
   appLoginUser: process.env.APP_LOGIN_USER || '',
   appLoginPassword: process.env.APP_LOGIN_PASSWORD || '',
+  appSupportUser: process.env.APP_SUPPORT_USER || '',
+  appSupportPassword: process.env.APP_SUPPORT_PASSWORD || '',
   appSessionHours: readPositiveInteger('APP_SESSION_HOURS', 12),
   appCookieSecure: readBoolean('APP_COOKIE_SECURE', process.env.NODE_ENV === 'production'),
   tipperRaiseAngleDeg: Number(process.env.TIPPER_RAISE_ANGLE_DEG ?? 40),
@@ -48,6 +50,10 @@ const config = {
   useMemoryMongo: readBoolean('USE_MEMORY_MONGO', false),
   nodeEnv: process.env.NODE_ENV || 'development'
 };
+
+if (config.appSupportUser && config.appSupportPassword && config.appSupportUser === config.appLoginUser) {
+  throw new Error('APP_SUPPORT_USER debe ser distinto de APP_LOGIN_USER');
+}
 
 if (!Number.isInteger(config.trackerSignatureToleranceSeconds) || config.trackerSignatureToleranceSeconds < 30) {
   throw new Error('TRACKER_SIGNATURE_TOLERANCE_SECONDS debe ser un entero mayor o igual a 30');

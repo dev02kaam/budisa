@@ -7,6 +7,8 @@ process.env.TRACKER_SHARED_SECRET = 'test-shared-secret';
 process.env.TRACKER_KEY_ID = 'gateway-v1';
 process.env.APP_LOGIN_USER = 'admin';
 process.env.APP_LOGIN_PASSWORD = 'test-login-password';
+process.env.APP_SUPPORT_USER = 'support@example.com';
+process.env.APP_SUPPORT_PASSWORD = 'test-support-password';
 process.env.APP_COOKIE_SECURE = 'false';
 process.env.TIPPER_RAISE_ANGLE_DEG = '40';
 process.env.TIPPER_LOWER_ANGLE_DEG = '20';
@@ -105,14 +107,16 @@ function signedRequest(payload, nonce = crypto.randomUUID()) {
   };
 }
 
-async function login(baseUrl) {
+async function login(baseUrl, username = 'admin', password = 'test-login-password', expectedRole = 'admin') {
   const response = await fetch(`${baseUrl}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: 'test-login-password' })
+    body: JSON.stringify({ username, password, role: 'support' })
   });
   const payload = await response.json();
   assert.equal(response.status, 200);
+  assert.equal(payload.data.username, username);
+  assert.equal(payload.data.role, expectedRole, 'The server assigns the role, ignoring the submitted role');
   const setCookie = response.headers.get('set-cookie') || '';
   assert.match(setCookie, /budisa_session=/);
   assert.match(setCookie, /HttpOnly/i);
@@ -457,7 +461,15 @@ async function run() {
     await require('./eye-sensor.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
     await require('./activity-report.cases')({ baseUrl, adminHeaders });
     await require('./tracker-deletion.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
-    await require('./tracker-debug.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
+    const supportHeaders = await require('./support-auth.cases')({ baseUrl, adminHeaders, login });
+    await require('./tracker-debug.cases')({ baseUrl, adminHeaders, supportHeaders, buildPayload, signedRequest });
+
+    assert.equal((await fetch(`${baseUrl}/auth/logout`, {
+      method: 'POST', headers: supportHeaders, body: '{}'
+    })).status, 200);
+    assert.equal((await fetch(`${baseUrl}/api/tracker/debug`, { headers: supportHeaders })).status, 401);
+    const supportSession = await fetch(`${baseUrl}/auth/session`, { headers: supportHeaders }).then((result) => result.json());
+    assert.equal(supportSession.data.authenticated, false);
 
     const logoutResponse = await fetch(`${baseUrl}/auth/logout`, {
       method: 'POST',

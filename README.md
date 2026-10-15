@@ -68,6 +68,19 @@ Para desarrollo local, coloca los valores en `.env`, que está ignorado por Git.
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+## Acceso de soporte
+
+El administrador del cliente utiliza `APP_LOGIN_USER` y `APP_LOGIN_PASSWORD` y conserva las herramientas de gestión de la flota. Debug queda reservado a una cuenta independiente con rol `support`, configurada únicamente en el servidor:
+
+```env
+APP_SUPPORT_USER=soporte@example.com
+APP_SUPPORT_PASSWORD="una-contrasena-privada"
+```
+
+La cuenta de soporte entra por el formulario habitual y no se anuncia en la pantalla de acceso. Puede utilizar la aplicación completa y consultar Debug; el administrador no ve esa opción y recibe `403 SUPPORT_REQUIRED` si consulta sus endpoints directamente. Las sesiones existentes de administrador conservan su rol.
+
+Configura ambas variables en `.env` para desarrollo y en Render para producción. El usuario debe ser distinto del administrador. Si falta alguna variable, el acceso de soporte queda desactivado, incluidas sus sesiones abiertas. Las contraseñas con `#` deben ir entre comillas en `.env`. No guardes credenciales reales en archivos versionados.
+
 ## Configuración manual del FTC880
 
 En Teltonika Configurator:

@@ -4,6 +4,13 @@ const { config } = require('../config/env');
 
 const SESSION_COOKIE = 'budisa_session';
 
+function configuredAccounts() {
+  return [
+    { username: config.appLoginUser, password: config.appLoginPassword, role: 'admin' },
+    { username: config.appSupportUser, password: config.appSupportPassword, role: 'support' }
+  ].filter((account) => account.username && account.password);
+}
+
 function randomToken() {
   return crypto.randomBytes(32).toString('base64url');
 }
@@ -37,7 +44,7 @@ function clearSessionCookieOptions() {
   return options;
 }
 
-async function createSession(username) {
+async function createSession(username, role = 'admin') {
   const sessionToken = randomToken();
   const csrfToken = randomToken();
   const expiresAt = new Date(Date.now() + sessionMaxAgeMs());
@@ -45,6 +52,7 @@ async function createSession(username) {
   const session = await AppSession.create({
     tokenHash: hashToken(sessionToken),
     username,
+    role,
     csrfToken,
     expiresAt
   });
@@ -61,7 +69,10 @@ async function findSessionFromRequest(req) {
     expiresAt: { $gt: new Date() }
   });
 
-  return session || null;
+  if (!session || !configuredAccounts().some((account) =>
+    account.username === session.username && account.role === session.role)) return null;
+
+  return session;
 }
 
 async function destroySession(session) {
@@ -73,6 +84,7 @@ async function destroySession(session) {
 module.exports = {
   SESSION_COOKIE,
   clearSessionCookieOptions,
+  configuredAccounts,
   createSession,
   destroySession,
   findSessionFromRequest,

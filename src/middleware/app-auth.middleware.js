@@ -12,11 +12,20 @@ async function requireAppSession(req, res, next) {
     const session = await findSessionFromRequest(req);
     if (!session) return next(unauthorized());
     req.appSession = session;
-    req.appUser = { username: session.username };
+    req.appUser = { username: session.username, role: session.role };
     return next();
   } catch (error) {
     return next(error);
   }
+}
+
+function requireSupportSession(req, res, next) {
+  if (req.appUser?.role === 'support') return next();
+
+  const error = new Error('Esta herramienta está reservada al equipo de soporte.');
+  error.code = 'SUPPORT_REQUIRED';
+  error.statusCode = 403;
+  return next(error);
 }
 
 function requireCsrfForUnsafeMethods(req, res, next) {
@@ -33,4 +42,4 @@ function requireCsrfForUnsafeMethods(req, res, next) {
   return next();
 }
 
-module.exports = { requireAppSession, requireCsrfForUnsafeMethods };
+module.exports = { requireAppSession, requireSupportSession, requireCsrfForUnsafeMethods };

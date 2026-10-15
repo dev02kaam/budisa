@@ -4,11 +4,14 @@ const TrackerPoint = require('../src/models/TrackerPoint');
 const { ingestPacket } = require('../src/services/teltonika.service');
 const { parseCodec8ExtendedFrame } = require('../src/teltonika/codec8e');
 
-module.exports = async function trackerDebugCases({ baseUrl, adminHeaders, buildPayload, signedRequest }) {
+module.exports = async function trackerDebugCases({ baseUrl, adminHeaders, supportHeaders, buildPayload, signedRequest }) {
   const debugUrl = `${baseUrl}/api/tracker/debug`;
-  const getPage = (query = '') => fetch(`${debugUrl}${query}`, { headers: adminHeaders }).then((response) => response.json());
-  const detail = (id) => fetch(`${debugUrl}/${id}`, { headers: adminHeaders }).then((response) => response.json());
+  const getPage = (query = '') => fetch(`${debugUrl}${query}`, { headers: supportHeaders }).then((response) => response.json());
+  const detail = (id) => fetch(`${debugUrl}/${id}`, { headers: supportHeaders }).then((response) => response.json());
   assert.equal((await fetch(debugUrl)).status, 401);
+  const forbidden = await fetch(debugUrl, { headers: adminHeaders });
+  assert.equal(forbidden.status, 403);
+  assert.equal((await forbidden.json()).code, 'SUPPORT_REQUIRED');
 
   const payload = buildPayload();
   payload.extraGatewayField = { '$original': 'preservado', 'campo.con.puntos': [1, 2], text: '<script>untrusted</script>' };
@@ -17,7 +20,7 @@ module.exports = async function trackerDebugCases({ baseUrl, adminHeaders, build
   // Exact whitespace is retained alongside all fields, including speed omitted by the fleet view.
   const response = await fetch(`${baseUrl}/tracker`, { method: 'POST', ...request });
   assert.equal(response.status, 200);
-  const pageResponse = await fetch(debugUrl, { headers: adminHeaders });
+  const pageResponse = await fetch(debugUrl, { headers: supportHeaders });
   assert.equal(pageResponse.headers.get('cache-control'), 'no-store');
   const page = (await pageResponse.json()).data;
   const reception = page.items.find((item) => item.packetId === payload.packet.packetId);
@@ -31,6 +34,11 @@ module.exports = async function trackerDebugCases({ baseUrl, adminHeaders, build
   assert.equal('rawBody' in reception, false);
   assert.equal('payload' in reception, false);
   assert.equal((await fetch(`${debugUrl}/${reception._id}`)).status, 401);
+  const forbiddenDetail = await fetch(`${debugUrl}/${reception._id}`, { headers: adminHeaders });
+  assert.equal(forbiddenDetail.status, 403);
+  const forbiddenBody = await forbiddenDetail.json();
+  assert.equal(forbiddenBody.code, 'SUPPORT_REQUIRED');
+  assert.equal('data' in forbiddenBody, false);
   const saved = (await detail(reception._id)).data;
   assert.equal(saved.rawBody, request.body);
   assert.deepEqual(saved.payload, payload);
@@ -62,10 +70,10 @@ module.exports = async function trackerDebugCases({ baseUrl, adminHeaders, build
   assert.deepEqual((await detail(invalidItem._id)).data.payload, invalidPayload);
 
   for (const query of ['?imei=bad', '?date=2026-02-30', '?date=2026-10-08&date=2026-10-09', '?before=bad', '?type=invalid', '?type=gps&type=tipper']) {
-    assert.equal((await fetch(`${debugUrl}${query}`, { headers: adminHeaders })).status, 400);
+    assert.equal((await fetch(`${debugUrl}${query}`, { headers: supportHeaders })).status, 400);
   }
-  assert.equal((await fetch(`${debugUrl}/invalid`, { headers: adminHeaders })).status, 400);
-  assert.equal((await fetch(`${debugUrl}/000000000000000000000000`, { headers: adminHeaders })).status, 404);
+  assert.equal((await fetch(`${debugUrl}/invalid`, { headers: supportHeaders })).status, 400);
+  assert.equal((await fetch(`${debugUrl}/000000000000000000000000`, { headers: supportHeaders })).status, 404);
 
   // All pages remain reachable, with dates filtered by the server's Madrid reception time.
   const imei = '356000000000090';

@@ -1,7 +1,7 @@
-const { config } = require('../config/env');
 const {
   SESSION_COOKIE,
   clearSessionCookieOptions,
+  configuredAccounts,
   createSession,
   destroySession,
   findSessionFromRequest,
@@ -13,6 +13,7 @@ function publicSessionData(session) {
   return {
     authenticated: true,
     username: session.username,
+    role: session.role,
     expiresAt: session.expiresAt,
     csrfToken: session.csrfToken
   };
@@ -20,7 +21,8 @@ function publicSessionData(session) {
 
 async function login(req, res, next) {
   try {
-    if (!config.appLoginUser || !config.appLoginPassword) {
+    const accounts = configuredAccounts();
+    if (!accounts.length) {
       const error = new Error('El acceso a Budisa todavía no está configurado en el servidor.');
       error.code = 'AUTH_NOT_CONFIGURED';
       error.statusCode = 503;
@@ -29,19 +31,19 @@ async function login(req, res, next) {
 
     const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
-    const valid = username.length <= 80
+    const account = username.length <= 80
       && password.length <= 256
-      && secureTextEqual(username, config.appLoginUser)
-      && secureTextEqual(password, config.appLoginPassword);
+      && accounts.find((candidate) => secureTextEqual(username, candidate.username)
+        && secureTextEqual(password, candidate.password));
 
-    if (!valid) {
+    if (!account) {
       const error = new Error('Usuario o contraseña incorrectos.');
       error.code = 'INVALID_CREDENTIALS';
       error.statusCode = 401;
       throw error;
     }
 
-    const { session, sessionToken } = await createSession(config.appLoginUser);
+    const { session, sessionToken } = await createSession(account.username, account.role);
     res.cookie(SESSION_COOKIE, sessionToken, sessionCookieOptions());
     return res.json({ ok: true, data: publicSessionData(session) });
   } catch (error) {

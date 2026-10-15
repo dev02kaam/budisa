@@ -1,6 +1,6 @@
 (() => {
   const el = (id) => document.getElementById(id);
-  const state = { items: [], nextCursor: null, before: '', date: '', imei: '', type: '',
+  const state = { enabled: false, items: [], nextCursor: null, before: '', date: '', imei: '', type: '',
     request: null, detailRequest: null, loaded: false, error: '', updatedAt: null,
     packet: null, packetId: '', trigger: null };
   const escape = (value) => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;')
@@ -63,7 +63,7 @@
   }
 
   async function load({ automatic = false } = {}) {
-    if (state.request || (automatic && state.before)) return;
+    if (!state.enabled || state.request || (automatic && state.before)) return;
     const controller = new AbortController();
     state.request = controller;
     state.error = '';
@@ -99,6 +99,7 @@
   }
 
   async function openPacket(id, trigger) {
+    if (!state.enabled) return;
     state.detailRequest?.abort();
     const controller = new AbortController();
     state.detailRequest = controller;
@@ -156,6 +157,7 @@
   }
 
   function reset() {
+    state.enabled = false;
     state.request?.abort();
     state.request = null;
     closePacket();
@@ -209,5 +211,8 @@
       if (state.packet === packet) el('debugPacketStatus').textContent = 'No se ha podido copiar. Puedes seleccionar el texto del paquete y copiarlo.';
     }
   });
-  window.trackerDebug = { load, reset };
+  window.trackerDebug = { load, reset, setEnabled(enabled) {
+    if (!enabled) reset();
+    state.enabled = Boolean(enabled);
+  } };
 })();

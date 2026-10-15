@@ -81,6 +81,7 @@ const state = {
   gateway: null,
   authenticated: false,
   sessionUser: '',
+  sessionRole: '',
   selectedImei: localStorage.getItem(STORAGE_KEYS.selectedImei) || '',
   fleetMap: null,
   fleetTileLayer: null,
@@ -521,6 +522,8 @@ function showLogin(message = '') {
   state.liveActivity = null;
   state.authenticated = false;
   state.sessionUser = '';
+  state.sessionRole = '';
+  elements.navButtons.find((button) => button.dataset.view === 'debug').hidden = true;
   state.adminEditingImei = '';
   window.apiClient.setCsrfToken('');
   setSyncing(false);
@@ -565,6 +568,10 @@ async function enterAuthenticatedApp(session) {
   setBootVisible(true, 'Cargando la flota…');
   state.authenticated = true;
   state.sessionUser = session.username || 'admin';
+  state.sessionRole = session.role || 'admin';
+  const isSupport = state.sessionRole === 'support';
+  elements.navButtons.find((button) => button.dataset.view === 'debug').hidden = !isSupport;
+  window.trackerDebug.setEnabled(isSupport);
   window.apiClient.setCsrfToken(session.csrfToken || '');
   elements.sessionUsername.textContent = state.sessionUser;
   elements.loginGate.hidden = true;
@@ -642,7 +649,8 @@ function applyTheme() {
 }
 
 function setView(view) {
-  const next = VIEW_META[view] ? view : 'dashboard';
+  const allowed = view !== 'debug' || (state.authenticated && state.sessionRole === 'support');
+  const next = VIEW_META[view] && allowed ? view : 'dashboard';
   state.view = next;
   localStorage.setItem(STORAGE_KEYS.view, next);
   elements.views.forEach((element) => element.classList.toggle('view-active', element.dataset.view === next));
