@@ -162,6 +162,10 @@ En ambos mapas, la línea es **azul en movimiento**, **ámbar en parada** y **gr
 
 Las basculaciones tienen un aviso **verde de inicio** y otro **rojo de fin**, con su hora y posición propias. Si falta GPS en una lectura, solo esa fase aparece como **Sin ubicación**. El ciclo sigue perteneciendo a la jornada de inicio aunque termine al día siguiente.
 
+Con los umbrales por defecto, un ángulo Roll de magnitud igual o superior a 40° abre la basculación y uno igual o inferior a 20° la cierra, **incluido 0°**. Una secuencia de 103° a 0° completa el ciclo aunque las lecturas lleguen en paquetes distintos o la bajada no tenga GPS. Las lecturas sin ángulo no cierran el ciclo.
+
+El histórico procesa por lotes todas las lecturas del intervalo, sin recortarlo a las últimas 100.000. Al arrancar se asegura que estén disponibles los índices de orden temporal completos, global y por dispositivo; permiten consultar intervalos amplios sin ordenar la telemetría en memoria. No se necesitan índices adicionales sobre los prefijos `deviceId` o `positionAt`.
+
 En el histórico, **Exportar PDF** descarga una jornada y **Exportar tabla a PDF** descarga un único documento con las jornadas visibles según los filtros de matrícula y fechas (hasta 1.000 jornadas). La tabla incluye matrícula, jornada, fecha/hora y coordenadas de inicio y fin, y duración. Conserva las jornadas sin basculaciones y señala los cierres pendientes. Los datos se consultan de nuevo al generar el informe; las horas corresponden a Europe/Madrid.
 
 El mapa usa Leaflet sobre cartografía OpenStreetMap con un tratamiento visual propio de Budisa.

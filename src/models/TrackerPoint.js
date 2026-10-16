@@ -21,13 +21,11 @@ const TrackerPointSchema = new mongoose.Schema(
     deviceId: {
       type: String,
       required: true,
-      match: /^\d{15}$/,
-      index: true
+      match: /^\d{15}$/
     },
     positionAt: {
       type: Date,
-      required: true,
-      index: true
+      required: true
     },
     gps: {
       type: GpsSchema,
@@ -57,8 +55,7 @@ const TrackerPointSchema = new mongoose.Schema(
     receivedAt: {
       type: Date,
       required: true,
-      default: Date.now,
-      index: true
+      default: Date.now
     }
   },
   {
@@ -67,7 +64,9 @@ const TrackerPointSchema = new mongoose.Schema(
   }
 );
 
-TrackerPointSchema.index({ deviceId: 1, positionAt: -1 });
-TrackerPointSchema.index({ deviceId: 1, receivedAt: -1 });
+// Match the complete order used by history and sensor reconstruction. An index
+// on positionAt alone still requires an in-memory sort for the tie breakers.
+TrackerPointSchema.index({ positionAt: -1, receivedAt: -1, _id: -1 });
+TrackerPointSchema.index({ deviceId: 1, positionAt: -1, receivedAt: -1, _id: -1 });
 
 module.exports = mongoose.model('TrackerPoint', TrackerPointSchema, 'tracker_points');

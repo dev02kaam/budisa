@@ -7,6 +7,11 @@ module.exports = async function checkEyeSensor({ baseUrl, adminHeaders, buildPay
   const angle = (value) => tipperState({ metadata: { rawIo: { 10832: value } } });
   assert.deepEqual(angle(40), { raised: true, angleDeg: 40 });
   assert.deepEqual(angle(20), { raised: false, angleDeg: 20 });
+  assert.deepEqual(angle(103), { raised: true, angleDeg: 103 });
+  assert.deepEqual(angle(0), { raised: false, angleDeg: 0 });
+  assert.deepEqual(angle(16), { raised: false, angleDeg: 16 });
+  assert.deepEqual(angle('0'), { raised: false, angleDeg: 0 });
+  assert.deepEqual(tipperState({ metadata: { knownIo: { tiltAngleDeg: 0 } } }), { raised: false, angleDeg: 0 });
   for (const value of [21, 30, 35, 39]) {
     assert.deepEqual(angle(value), { raised: null, angleDeg: value });
   }
@@ -126,5 +131,24 @@ module.exports = async function checkEyeSensor({ baseUrl, adminHeaders, buildPay
     { time: '2026-09-18T08:02:00Z', roll: 20 }
   ]);
   assert.equal((await days(idleImei))[0].tipEvents.length, 0);
+
+  // A real-world sequence: over 90 degrees, then exactly zero in the next packet.
+  // Missing GPS and subsequent packets without an angle must not lose that close.
+  const zeroImei = '356000000000804';
+  await registerTracker({ imei: zeroImei, licensePlate: '0804 EYE' });
+  await send(zeroImei, [{ time: '2026-09-18T10:00:00Z', roll: 103, gps: true }]);
+  assert.equal((await days(zeroImei))[0].tipEvents[0].status, 'active');
+  const zeroReplay = await send(zeroImei, [{ time: '2026-09-18T10:00:41Z', roll: 0 }]);
+  assert.equal((await zeroReplay()).status, 200);
+  await send(zeroImei, [{ time: '2026-09-18T10:01:00Z' }]);
+  const closedAtZero = (await days(zeroImei, '2026-08-20', '2026-09-18'))[0];
+  assert.equal(closedAtZero.tipEvents.length, 1);
+  assert.equal(closedAtZero.tipEvents[0].status, 'completed');
+  assert.equal(closedAtZero.tipEvents[0].endAt, '2026-09-18T10:00:41.000Z');
+  assert.equal(closedAtZero.tipEvents[0].durationSeconds, 41);
+  assert.equal(closedAtZero.tipEvents[0].endLatitude, null);
+  const currentFleet = await fetch(`${baseUrl}/api/fleet`, { headers: adminHeaders }).then((r) => r.json());
+  assert.equal(currentFleet.data.find((item) => item.imei === zeroImei).tipper.raised, false);
+  assert.equal(currentFleet.data.find((item) => item.imei === zeroImei).tipper.angleDeg, 0);
   console.log('ok - EYE empareja subida/bajada sin GPS, respeta 40/20 grados, duplicados, orden y medianoche');
 };

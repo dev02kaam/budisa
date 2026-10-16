@@ -3,9 +3,13 @@ const STATE_KEYS = ['tipperRaised', 'tipperActive', 'bodyRaised', 'bedRaised', '
 const ANGLE_KEYS = ['tipperAngleDeg', 'tiltAngleDeg', 'eyeAngleDeg', 'bedAngleDeg', 'bodyAngleDeg'];
 // FTC887: EYE Sensor 1, Roll, signed 16-bit degrees (AVL ID 10832).
 const EYE_ROLL_ID = '10832';
+const TIPPER_SIGNAL_FIELDS = Object.fromEntries([
+  ...STATE_KEYS.map((key) => [`metadata.knownIo.${key}`, 1]),
+  ...ANGLE_KEYS.map((key) => [`metadata.knownIo.${key}`, 1]),
+  [`metadata.rawIo.${EYE_ROLL_ID}`, 1]
+]);
 const TIPPER_SIGNAL_QUERY = {
-  $or: [...STATE_KEYS, ...ANGLE_KEYS].map((key) => ({ [`metadata.knownIo.${key}`]: { $exists: true } }))
-    .concat({ [`metadata.rawIo.${EYE_ROLL_ID}`]: { $exists: true } })
+  $or: Object.keys(TIPPER_SIGNAL_FIELDS).map((key) => ({ [key]: { $exists: true } }))
 };
 
 function booleanState(value) {
@@ -50,4 +54,4 @@ function tipperState(point) {
   return angleState(angle);
 }
 
-module.exports = { booleanState, tipperState, TIPPER_SIGNAL_QUERY };
+module.exports = { booleanState, tipperState, TIPPER_SIGNAL_QUERY, TIPPER_SIGNAL_FIELDS };

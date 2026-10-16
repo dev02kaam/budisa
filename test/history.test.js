@@ -162,6 +162,22 @@ async function run() {
   await app.exportHistoryPdf();
   assert.match(elements.historyExportStatus.textContent, /No se ha podido exportar/);
   assert.equal(state.historyExporting, false);
+  // An initial production/API failure must recover and reveal the lowering time.
+  const recovery = createClient();
+  recovery.state.authenticated = true;
+  recovery.state.view = 'historico';
+  recovery.setDefaultHistoryRange();
+  recovery.context.requestJson = async () => { throw new Error('Error interno del servidor.'); };
+  await recovery.loadHistoryData();
+  assert.match(recovery.elements.historyRouteList.innerHTML, /No se ha podido cargar el histórico/);
+  recovery.context.requestJson = async (url) => url.startsWith('/api/tracker/days?') ? [{ ...row, tipEvents: [
+    { timestamp: `${today}T08:00:00Z`, endAt: `${today}T08:00:41Z`, durationSeconds: 41, status: 'completed', latitude: null, longitude: null }
+  ] }] : [];
+  recovery.startRefreshTimer();
+  await recovery.tick();
+  assert.equal(recovery.state.historyError, '');
+  assert.match(recovery.elements.historyRouteList.innerHTML, /Duración: 41 s/);
+  assert.doesNotMatch(recovery.elements.historyRouteList.innerHTML, /Pendiente de cierre|No se ha podido cargar/);
   console.log('ok - historico actualiza durante el dia, conserva datos tras errores y respeta filtros concurrentes');
 }
 

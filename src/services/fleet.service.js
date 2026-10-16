@@ -1,12 +1,22 @@
 const Tracker = require('../models/Tracker');
 const TrackerPoint = require('../models/TrackerPoint');
-const { booleanState, tipperState, TIPPER_SIGNAL_QUERY } = require('../utils/tipper');
+const { booleanState, tipperState, TIPPER_SIGNAL_QUERY, TIPPER_SIGNAL_FIELDS } = require('../utils/tipper');
 
 const ONLINE_WINDOW_MS = 15 * 60 * 1000;
 const STALE_WINDOW_MS = 60 * 60 * 1000;
 const MAX_MOVEMENT_INTERVAL_MS = 15 * 60 * 1000;
 const MADRID_TIME_ZONE = 'Europe/Madrid';
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const madridDayFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: MADRID_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit'
+});
+// History only needs the operational sensor fields, not every raw AVL value.
+// The original records remain available through tracker and debug endpoints.
+const ACTIVITY_POINT_FIELDS = {
+  deviceId: 1, positionAt: 1, receivedAt: 1, gps: 1,
+  'metadata.imei': 1, 'metadata.gpsValid': 1, 'metadata.movement': 1,
+  'metadata.knownIo.movement': 1, 'metadata.rawIo.240': 1, ...TIPPER_SIGNAL_FIELDS
+};
 const madridOffsetFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: MADRID_TIME_ZONE,
   timeZoneName: 'longOffset'
@@ -23,12 +33,7 @@ function pointDate(point) {
 }
 
 function dayKeyFor(date) {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: MADRID_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).formatToParts(date).reduce((result, part) => {
+  const parts = madridDayFormatter.formatToParts(date).reduce((result, part) => {
     result[part.type] = part.value;
     return result;
   }, {});
@@ -138,7 +143,7 @@ async function findTipperReading(imei, range, direction = -1, raised) {
     deviceId: imei,
     ...TIPPER_SIGNAL_QUERY,
     ...(range ? { positionAt: range } : {})
-  }).select({ positionAt: 1, receivedAt: 1, metadata: 1, gps: 1 })
+  }).select(ACTIVITY_POINT_FIELDS)
     .sort({ positionAt: direction, receivedAt: direction, _id: direction }).lean().cursor();
   try {
     for await (const point of cursor) {
@@ -181,27 +186,36 @@ function closeTip(event, item) {
   event.endLongitude = item.longitude;
 }
 
+function advanceTipEvent(state, item) {
+  if (item.tipper?.raised == null) return null;
+  let opened = null;
+  if (item.tipper.raised && state.raised !== true) {
+    opened = state.activeEvent = openTip(item);
+  } else if (!item.tipper.raised && state.activeEvent) {
+    closeTip(state.activeEvent, item);
+    state.activeEvent = null;
+  }
+  state.raised = item.tipper.raised;
+  return opened;
+}
+
+async function finishTipEvent(imei, state) {
+  if (!state.activeEvent) return;
+  const closing = await findTipperReading(imei, { $gt: state.lastTimestamp }, 1, false);
+  if (closing) closeTip(state.activeEvent, closing);
+}
+
 async function pairTipEvents(imei, items, { includeCarried = false, lookAhead = true } = {}) {
   if (!items.length) return [];
   const previous = await findTipperReading(imei, { $lt: items[0].timestamp });
-  let raised = previous?.raised ?? null;
-  let activeEvent = includeCarried && raised === true ? openTip(previous) : null;
-  const events = activeEvent ? [activeEvent] : [];
+  const state = { raised: previous?.raised ?? null, activeEvent: null, lastTimestamp: items[items.length - 1].timestamp };
+  if (includeCarried && state.raised === true) state.activeEvent = openTip(previous);
+  const events = state.activeEvent ? [state.activeEvent] : [];
   for (const item of items) {
-    if (item.tipper?.raised == null) continue;
-    if (item.tipper.raised && raised !== true) {
-      activeEvent = openTip(item);
-      events.push(activeEvent);
-    } else if (!item.tipper.raised && activeEvent) {
-      closeTip(activeEvent, item);
-      activeEvent = null;
-    }
-    raised = item.tipper.raised;
+    const opened = advanceTipEvent(state, item);
+    if (opened) events.push(opened);
   }
-  if (activeEvent && lookAhead) {
-    const closing = await findTipperReading(imei, { $gt: items[items.length - 1].timestamp }, 1, false);
-    if (closing) closeTip(activeEvent, closing);
-  }
+  if (lookAhead) await finishTipEvent(imei, state);
   return events;
 }
 
@@ -225,7 +239,7 @@ async function getLiveActivity(now = new Date()) {
   const trackers = await Tracker.find({ enabled: true, deletedAt: null }).select({ imei: 1 }).lean();
   const maximumPoints = 100000;
   const points = await TrackerPoint.find({ deviceId: { $in: trackers.map((item) => item.imei) }, positionAt: { $gte: from, $lte: to } })
-    .select({ deviceId: 1, positionAt: 1, receivedAt: 1, gps: 1, metadata: 1 })
+    .select(ACTIVITY_POINT_FIELDS)
     .sort({ positionAt: -1, receivedAt: -1, _id: -1 }).limit(maximumPoints + 1).lean();
   const grouped = new Map();
   points.slice(0, maximumPoints).reverse().forEach((point) => {
@@ -331,24 +345,23 @@ async function getTrackerDays(filters = {}, limit = 500, { selection } = {}) {
   if (filters.from || filters.to) query.positionAt = buildMadridDayRange(filters);
   if (selection) query.$or = selection.map(({ imei, date }) => ({ deviceId: imei, positionAt: buildMadridDayRange({ from: date, to: date }) }));
 
-  const points = await TrackerPoint.find(query)
-    .select({ deviceId: 1, positionAt: 1, receivedAt: 1, gps: 1, metadata: 1 })
-    .sort({ positionAt: -1, receivedAt: -1, _id: -1 })
-    .limit(selection ? 0 : 100000)
-    .lean();
+  const points = TrackerPoint.find(query)
+    .select(ACTIVITY_POINT_FIELDS)
+    .sort({ positionAt: 1, receivedAt: 1, _id: 1 })
+    .lean().cursor({ batchSize: 10000 });
   const groups = new Map();
   const byVehicle = new Map();
 
-  points.reverse().forEach((point) => {
+  for await (const point of points) {
     const timestamp = pointDate(point);
-    if (!timestamp) return;
+    if (!timestamp) continue;
     const gpsValid = point.metadata?.gpsValid !== false && validCoordinates(point);
 
     const imei = String(point.metadata?.imei || point.deviceId || '');
-    if (!/^\d{15}$/.test(imei)) return;
+    if (!/^\d{15}$/.test(imei)) continue;
     const date = dayKeyFor(timestamp);
-    if (filters.from && date < filters.from) return;
-    if (filters.to && date > filters.to) return;
+    if (filters.from && date < filters.from) continue;
+    if (filters.to && date > filters.to) continue;
 
     const key = `${imei}|${date}`;
     const item = pointItem(point);
@@ -362,37 +375,38 @@ async function getTrackerDays(filters = {}, limit = 500, { selection } = {}) {
       movementSeconds: 0,
       distanceMeters: 0,
       tipEvents: [],
-      ordered: []
+      previousItem: null
     };
 
     group.pointCount += 1;
     if (gpsValid) group.gpsPointCount += 1;
     if (timestamp < group.startAt) group.startAt = timestamp;
     if (timestamp > group.endAt) group.endAt = timestamp;
-    group.ordered.push(item);
-    groups.set(key, group);
-    const vehicle = byVehicle.get(imei) || [];
-    vehicle.push(item);
-    byVehicle.set(imei, vehicle);
-  });
-
-  // Pair readings by their device timestamps, across packets and civil-day boundaries.
-  await Promise.all([...byVehicle].map(async ([imei, items]) => {
-    // Non-contiguous PDF selections must not pair across omitted days.
-    const batches = [];
-    for (const item of items) {
-      let batch = batches[batches.length - 1];
-      const last = batch?.[batch.length - 1];
-      if (!batch || (selection && dayKeyFor(item.timestamp) !== dayKeyFor(last.timestamp))) {
-        batch = []; batches.push(batch);
+    const previousItem = group.previousItem;
+    if (previousItem) {
+      if (previousItem.gpsValid && item.gpsValid) group.distanceMeters += haversineDistanceMeters(previousItem, item);
+      const intervalMs = timestamp - previousItem.timestamp;
+      if (previousItem.movement === true && intervalMs > 0) {
+        group.movementSeconds += Math.round(Math.min(intervalMs, MAX_MOVEMENT_INTERVAL_MS) / 1000);
       }
-      batch.push(item);
     }
-    for (const batch of batches) {
-      const events = await pairTipEvents(imei, batch);
-      events.forEach((event) => groups.get(`${imei}|${dayKeyFor(event.timestamp)}`)?.tipEvents.push(event));
+    group.previousItem = item;
+    groups.set(key, group);
+
+    let vehicle = byVehicle.get(imei);
+    // Each selected PDF day gets its own boundary lookup; omitted days cannot
+    // create a second start or merge independent cycles in selected days.
+    if (!vehicle || (selection && vehicle.date !== date)) {
+      if (vehicle) await finishTipEvent(imei, vehicle);
+      const previous = await findTipperReading(imei, { $lt: timestamp });
+      vehicle = { date, raised: previous?.raised ?? null, activeEvent: null, lastTimestamp: timestamp };
+      byVehicle.set(imei, vehicle);
     }
-  }));
+    const opened = advanceTipEvent(vehicle, item);
+    if (opened) group.tipEvents.push(opened);
+    vehicle.lastTimestamp = timestamp;
+  }
+  await Promise.all([...byVehicle].map(([imei, vehicle]) => finishTipEvent(imei, vehicle)));
 
   const grouped = [...groups.values()];
   const trackers = await Tracker.find({ imei: { $in: grouped.map((group) => group.imei) } })
@@ -402,17 +416,7 @@ async function getTrackerDays(filters = {}, limit = 500, { selection } = {}) {
 
   return grouped
     .map((group) => {
-      group.ordered.sort((left, right) => left.timestamp - right.timestamp);
-      for (let index = 1; index < group.ordered.length; index += 1) {
-        const previous = group.ordered[index - 1];
-        const current = group.ordered[index];
-        if (previous.gpsValid && current.gpsValid) group.distanceMeters += haversineDistanceMeters(previous, current);
-        const intervalMs = current.timestamp - previous.timestamp;
-        if (previous.movement === true && intervalMs > 0) {
-          group.movementSeconds += Math.round(Math.min(intervalMs, MAX_MOVEMENT_INTERVAL_MS) / 1000);
-        }
-      }
-      const { ordered, ...summary } = group;
+      const { previousItem, ...summary } = group;
       const tracker = trackersByImei.get(group.imei);
       return {
         ...summary,
@@ -439,7 +443,7 @@ async function getTrackerDayRoute({ imei, date } = {}) {
     deviceId: imei,
     positionAt: buildMadridDayRange({ from: date, to: date }),
   })
-    .select({ _id: 0, positionAt: 1, gps: 1, metadata: 1 })
+    .select({ ...ACTIVITY_POINT_FIELDS, _id: 0 })
     .sort({ positionAt: 1, receivedAt: 1 })
     .limit(maximumPoints + 1)
     .lean();

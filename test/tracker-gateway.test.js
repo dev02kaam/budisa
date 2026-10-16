@@ -459,6 +459,7 @@ async function run() {
     assert.equal(updatedMovement.data[0].tipEvents.length, 1);
 
     await require('./eye-sensor.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
+    await require('./history-indexes.cases')({ baseUrl, adminHeaders });
     await require('./activity-report.cases')({ baseUrl, adminHeaders });
     await require('./tracker-deletion.cases')({ baseUrl, adminHeaders, buildPayload, signedRequest });
     const supportHeaders = await require('./support-auth.cases')({ baseUrl, adminHeaders, login });

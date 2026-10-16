@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const { config } = require('./env');
+const TrackerPoint = require('../models/TrackerPoint');
 
 let memoryServer = null;
 
@@ -12,6 +13,7 @@ async function connectDb() {
       await mongoose.connect(config.mongoUri, {
         serverSelectionTimeoutMS: 3000
       });
+      await TrackerPoint.init();
       console.log('MongoDB connected');
       return { mode: 'external', uri: config.mongoUri };
     }
@@ -31,6 +33,7 @@ async function connectDb() {
 
   const uri = memoryServer.getUri();
   await mongoose.connect(uri);
+  await TrackerPoint.init();
   console.log('MongoDB en memoria conectado');
   return { mode: 'memory', uri };
 }
